@@ -108,7 +108,7 @@ class Table:
 
         # Define table name, if not specified manually
         if tablename == '':
-            self.tablename = os.path.splitext(os.path.split(filename)[1])[0]
+            self.tablename = filename
 
         # Find batch count and subbatch count
         self.batch_count = int(self.tables[2][1][1])
@@ -168,7 +168,7 @@ def plot_array(array_list, compose_mode = 'combined', **kwargs):
         - 'sub: plot each array in a subplot
     - kwargs:
         - meta_map: list, mapping of sample batch/subbatch number and position of array in array_list
-            - format: [(batch, subbatch), (batch, subbatch)]
+            - format: [(table_name, batch_num, subbatch_num),]
         - sub_width: int, specifies how many subplots should be in a row
         - legends: bool, switch on/off legends
     '''
@@ -183,7 +183,8 @@ def plot_array(array_list, compose_mode = 'combined', **kwargs):
                 meta_map = kwargs.get('meta_map')
                 legend_list = []
                 for elem in meta_map:
-                    legend_list.append(str(str(elem[0])) + '-' + str(elem[1]))
+                    tablename = os.path.splitext(os.path.split(elem[1])[1])[0]
+                    legend_list.append(tablename + '-' + str(elem[1])) + '-' + str(elem[2])
                 plt.legend(legend_list, loc='upper left')
             
         plt.axis(xmin=0, ymin=0)
@@ -201,9 +202,9 @@ def plot_array(array_list, compose_mode = 'combined', **kwargs):
             plt.xlabel('Strain')
             if kwargs.get('meta_map') != None:
                 meta_map = kwargs.get('meta_map')
-                plt.savefig(os.path.join(os.path.dirname(args.file), "%s-%d-%d.png" % (os.path.splitext(args.file)[0], meta_map[count-1][0], meta_map[count-1][1])))
+                plt.savefig(os.path.join(os.path.dirname(args.file), "%s-%d-%d.png" % (meta_map[count-1][0], meta_map[count-1][1], meta_map[count-1][2])))
             else:
-                plt.savefig(os.path.join(os.path.dirname(args.file), "%s-%d.png" % (os.path.splitext(args.file)[0], count)))
+                plt.savefig(os.path.join(os.path.dirname(args.file), "%s-%d.png" % (os.path.splitext(args.file)[0], count)))    # If meta_map is not specified, then it should not be in interactive mode and only have 1 file/table working, so args.file is used as a dirty hack
             count += 1  
     elif compose_mode == 'sub':
         pass
@@ -214,51 +215,53 @@ def plot_array(array_list, compose_mode = 'combined', **kwargs):
 
 # Main processing flow
 
-result_list = []
-meta_list = []
+result_list = []    # List of processed results
+meta_list = []  # Metadata of processed results: [(table_name, batch_num, subbatch_num),]
 strength_list = []
 slope_list = []
 
-tables_list = []
-if os.path.isfile(args.file):
-    tables_list.append(Table(args.file))
+if args.interactive != True:
 
-if args.select:
-    select_split = str.split(args.select, ',')
-    for elem in select_split:
-        batch = int(str.split(elem, '-')[0])
-        subbatch = int(str.split(elem, '-')[1])
-        if len(str.split(elem, '-')) == 3:
-            result = truncate_at(tables_list[0].get(int(str.split(elem, '-')[0]), int(str.split(elem, '-')[1])), int(str.split(elem, '-')[2]))
-        else:
-            result = tables_list[0].get(int(str.split(elem, '-')[0]), int(str.split(elem, '-')[1]))
+    tables_list = []
+    if os.path.isfile(args.file):
+        tables_list.append(Table(args.file))
 
-        result_list.append(result)
-        strength_list.append(max_stress(result)[0])
-        meta_list.append((batch, subbatch))
+    if args.select:
+        select_split = str.split(args.select, ',')
+        for elem in select_split:
+            batch = int(str.split(elem, '-')[0])
+            subbatch = int(str.split(elem, '-')[1])
+            if len(str.split(elem, '-')) == 3:
+                result = truncate_at(tables_list[0].get(int(str.split(elem, '-')[0]), int(str.split(elem, '-')[1])), int(str.split(elem, '-')[2]))
+            else:
+                result = tables_list[0].get(int(str.split(elem, '-')[0]), int(str.split(elem, '-')[1]))
 
-else:
-    for i in range (0, tables_list[0].batch_count):
-        for j in range(0, tables_list[0].subbatch_count):
-            result = tables_list[0].get(i+1, j+1)
             result_list.append(result)
             strength_list.append(max_stress(result)[0])
-            meta_list.append((i+1, j+1))
+            meta_list.append((tables_list[0].tablename, batch, subbatch))
 
-for elem in result_list:
-    if args.slope_range:
-        slope_range = (int(str.split(args.slope_range, ',')[0]), int(str.split(args.slope_range, ',')[1]))
-        slope_list.append(linear_regression(elem, from_to=slope_range)[0])
     else:
-        slope_list.append(linear_regression(elem)[0])
+        for i in range (0, tables_list[0].batch_count):
+            for j in range(0, tables_list[0].subbatch_count):
+                result = tables_list[0].get(i+1, j+1)
+                result_list.append(result)
+                strength_list.append(max_stress(result)[0])
+                meta_list.append((tables_list[0].tablename, i+1, j+1))
 
-logger.info("Young's modulus for plotted samples: %f, standard deviation: %f" % (np.average(slope_list), np.std(slope_list)))
-logger.info("UTS for plotted samples: %f, standard deviation: %f" % (np.average(strength_list), np.std(strength_list)))
+    for elem in result_list:
+        if args.slope_range:
+            slope_range = (int(str.split(args.slope_range, ',')[0]), int(str.split(args.slope_range, ',')[1]))
+            slope_list.append(linear_regression(elem, from_to=slope_range)[0])
+        else:
+            slope_list.append(linear_regression(elem)[0])
 
-if args.compose_mode:
-    plot_array(result_list, compose_mode=args.compose_mode, meta_map = meta_list, legends = args.legend)
-else:
-    plot_array(result_list, meta_map = meta_list, legends = args.legend)
+    logger.info("Young's modulus for plotted samples: %f, standard deviation: %f" % (np.average(slope_list), np.std(slope_list)))
+    logger.info("UTS for plotted samples: %f, standard deviation: %f" % (np.average(strength_list), np.std(strength_list)))
+
+    if args.compose_mode:
+        plot_array(result_list, compose_mode=args.compose_mode, meta_map = meta_list, legends = args.legend)
+    else:
+        plot_array(result_list, meta_map = meta_list, legends = args.legend)
 
 
 # Testing code
