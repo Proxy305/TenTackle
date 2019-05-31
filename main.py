@@ -11,7 +11,7 @@ import math
 
 # Initialize Argument Parser (argparse)
 parser = argparse.ArgumentParser(description='Tensile_auto: Tensile data analysis assisting tool for Shimazu.')
-parser.add_argument("file", help="Specifies the .csv file to be processed")
+parser.add_argument("-f", "--file", help="Specifies the .csv file to be processed")
 parser.add_argument("-i", "--interactive", help="Use interactive mode", action="store_true")
 parser.add_argument("-v", "--verbose", help="Increase output verbosity", action="store_true")
 parser.add_argument("-l", "--legend", help="Switch on/off legends", action="store_true")
@@ -183,8 +183,8 @@ def plot_array(array_list, compose_mode = 'combined', **kwargs):
                 meta_map = kwargs.get('meta_map')
                 legend_list = []
                 for elem in meta_map:
-                    tablename = os.path.splitext(os.path.split(elem[1])[1])[0]
-                    legend_list.append(tablename + '-' + str(elem[1])) + '-' + str(elem[2])
+                    tablename = os.path.splitext(os.path.split(elem[0])[1])[0]
+                    legend_list.append(tablename + '-' + str(elem[1])  + '-' + str(elem[2]))
                 plt.legend(legend_list, loc='upper left')
             
         plt.axis(xmin=0, ymin=0)
@@ -220,33 +220,40 @@ meta_list = []  # Metadata of processed results: [(table_name, batch_num, subbat
 strength_list = []
 slope_list = []
 
-if args.interactive != True:
+def cache(table, select_str = ''):
+    if select_str != '':
+        select_split = str.split(args.select, ',')
+        for elem in select_split:
+            batch = int(str.split(elem, '-')[0])
+            subbatch = int(str.split(elem, '-')[1])
+            if len(str.split(elem, '-')) == 3:
+                result = truncate_at(table.get(batch, subbatch), int(str.split(elem, '-')[2]))
+            else:
+                result = table.get(batch, subbatch)
+            meta_list.append((table.tablename, batch, subbatch))
+            result_list.append(result)
+            strength_list.append(max_stress(result)[0])
+    else:
+        for i in range (0, table.batch_count):
+            for j in range(0, table.subbatch_count):
+                result = table.get(i+1, j+1)
+                result_list.append(result)
+                strength_list.append(max_stress(result)[0])
+                meta_list.append((table.tablename, i+1, j+1))
+
+if args.interactive != True and args.file:
 
     tables_list = []
     if os.path.isfile(args.file):
         tables_list.append(Table(args.file))
 
     if args.select:
-        select_split = str.split(args.select, ',')
-        for elem in select_split:
-            batch = int(str.split(elem, '-')[0])
-            subbatch = int(str.split(elem, '-')[1])
-            if len(str.split(elem, '-')) == 3:
-                result = truncate_at(tables_list[0].get(int(str.split(elem, '-')[0]), int(str.split(elem, '-')[1])), int(str.split(elem, '-')[2]))
-            else:
-                result = tables_list[0].get(int(str.split(elem, '-')[0]), int(str.split(elem, '-')[1]))
 
-            result_list.append(result)
-            strength_list.append(max_stress(result)[0])
-            meta_list.append((tables_list[0].tablename, batch, subbatch))
+        cache(tables_list[0], args.select)
 
     else:
-        for i in range (0, tables_list[0].batch_count):
-            for j in range(0, tables_list[0].subbatch_count):
-                result = tables_list[0].get(i+1, j+1)
-                result_list.append(result)
-                strength_list.append(max_stress(result)[0])
-                meta_list.append((tables_list[0].tablename, i+1, j+1))
+
+        cache(tables_list[0])
 
     for elem in result_list:
         if args.slope_range:
@@ -262,6 +269,35 @@ if args.interactive != True:
         plot_array(result_list, compose_mode=args.compose_mode, meta_map = meta_list, legends = args.legend)
     else:
         plot_array(result_list, meta_map = meta_list, legends = args.legend)
+
+elif args.interactive == True:
+
+    # Interactive mode
+
+    while(True):
+        main_operation = input("Enter action: open/exit\n")
+
+        if main_operation == 'open':
+            filename = input("Enter file name:\n")
+            if os.path.isfile(filename):
+                tables_list.append(Table(filename))
+
+                select = input("Select samples, or input 'all' to select all. Format: batch-subbatch, batch-subbatch")
+                if select == 'all':
+                    pass
+                else:
+                    pass
+            else:
+                print("%s: not found. Try again.")
+                break
+        elif main_operation == 'exit':
+            print("Exit now.")
+            break
+        else:
+            print("Invalid action.")
+else:
+    logger.error("No file specified. Exit.\n Use -h for help.")
+
 
 
 # Testing code
