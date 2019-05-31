@@ -36,68 +36,8 @@ if args.verbose:
 if args.interactive:
     logger.debug("Interactive mode: on")
 
-# tables: keeps all table raw infomation
-tables = []
 
-# Split multiple tables in single .csv file
-try:
-    with open(args.file, newline='', encoding='Shift-JIS') as f:
-        reader = csv.reader(f)
-
-        temp_table = []
-
-        for row in reader:
-            if row != []:
-                temp_table.append(row)
-            else:
-                tables.append(temp_table)
-                temp_table = []
-except FileNotFoundError as e:
-    logger.error(str(e))
-    exit(1)
-
-
-# Find batch count and subbatch count
-batch_count = int(tables[2][1][1])
-subbatch_count = int(tables[2][1][2])
-
-logger.info("Batch count: " + str(batch_count) + ", subbatch count: " + str(subbatch_count))
-
-# Helper functions
-
-# Helper function category A: functions that directly deals with raw data
-# Creation, and usage of cat. A helper function should be avoided for better de-coupling
-
-def find_dimensions(batch, subbatch):
-
-    '''
-    Find dimensions of a given sample specified by batch and subbatch
-    '''
-    sample_number = batch * subbatch
-    thickness = float(tables[2][3+sample_number][1])
-    width = float(tables[2][3+sample_number][2])
-    length = float(tables[2][3+sample_number][3])
-
-    logger.debug("Demensions for batch %d, subbatch %d: %s" % (batch, subbatch, (thickness, width, length)))
-
-    return thickness, width, length
-
-def fetch_raw(batch, subbatch):
-
-    '''
-    Fetch stress/strain raw data for a given sample
-    '''
-
-    sample_number = batch * subbatch
-    # Retrieve raw data, and make new numpy array
-    str_array = np.array(tables[3+sample_number][3:])
-    # Convert data type to float
-    array = str_array[:, [1, 2]].astype(np.float)
-    
-    return array
-
-# Helper function category B: functions that accepts a procecced stress/strain data array
-
+# Helper functions: functions that accepts a procecced stress/strain data array
 def calculate(array, dimensions):  
     '''
     Calculate stress/strain records of a given sample
@@ -117,6 +57,102 @@ def truncate_at(array, percentage):
     truncated_len = math.ceil(len(array) * (percentage/100))
 
     return array[0:truncated_len, :]
+
+def linear_regression(array, from_to = (30, 150)):
+
+    '''
+    Linear regression helper function, for finding slopes
+    '''
+
+    measure_area = array[from_to[0]:from_to[1], :]
+    x = measure_area[:, 1]
+    y = measure_area[:, 0]
+
+    slope = (len(x) * np.sum(x*y) - np.sum(x) * np.sum(y)) / (len(x)*np.sum(x*x) - np.sum(x) ** 2)
+    intercept = (np.sum(y) - slope *np.sum(x)) / len(x)
+
+    return slope, intercept
+
+def max_stress(array):
+
+    '''
+    Find maximum stress in a stress/strain array
+    '''
+    
+    max_stress = np.amax(array, axis=0)
+    return max_stress   # max_stress: tuple, with stress and corresponding strain info
+
+class Table:
+
+    '''
+    Structure for storaging raw data from a single .csv file
+    '''
+
+    def __init__(self, filename, tablename = ''):
+        
+        # self.tables: keeps all table raw infomation
+        self.tables = []
+
+        # Split multiple tables in single .csv file
+        with open(filename, newline='', encoding='Shift-JIS') as f:
+            reader = csv.reader(f)
+
+            temp_table = []
+
+            for row in reader:
+                if row != []:
+                    temp_table.append(row)
+                else:
+                    self.tables.append(temp_table)
+                    temp_table = []
+
+        # Define table name, if not specified manually
+        if tablename == '':
+            self.tablename = os.path.splitext(os.path.split(filename)[1])[0]
+
+        # Find batch count and subbatch count
+        self.batch_count = int(self.tables[2][1][1])
+        self.subbatch_count = int(self.tables[2][1][2])
+
+        logger.info("Batch count: " + str(self.batch_count) + ", subbatch count: " + str(self.subbatch_count))
+
+
+    def dimensions(self, batch, subbatch):
+
+        '''
+        Find dimensions of a given sample specified by batch and subbatch
+        '''
+        sample_number = batch * subbatch
+        thickness = float(self.tables[2][3+sample_number][1])
+        width = float(self.tables[2][3+sample_number][2])
+        length = float(self.tables[2][3+sample_number][3])
+
+        logger.debug("Demensions for batch %d, subbatch %d: %s" % (batch, subbatch, (thickness, width, length)))
+
+        return thickness, width, length
+
+    def raw(self, batch, subbatch):
+
+        '''
+        Fetch stress/strain raw data for a given sample
+        '''
+
+        sample_number = batch * subbatch
+        # Retrieve raw data, and make new numpy array
+        str_array = np.array(self.tables[3+sample_number][3:])
+        # Convert data type to float
+        array = str_array[:, [1, 2]].astype(np.float)
+        
+        return array
+
+    def get(self, batch, subbatch):
+
+        '''
+        Get processed strain/stress data
+        '''
+
+        return calculate(self.raw(batch, subbatch), self.dimensions(batch, subbatch))
+
 
 # Plotting function
 def plot_array(array_list, compose_mode = 'combined', **kwargs):
@@ -174,29 +210,6 @@ def plot_array(array_list, compose_mode = 'combined', **kwargs):
     else:
         logger.error("Incorrect compose_mode.")
 
-def max_stress(array):
-
-    '''
-    Find maximum stress in a stress/strain array
-    '''
-    
-    max_stress = np.amax(array, axis=0)
-    return max_stress   # max_stress: tuple, with stress and corresponding strain info
-
-def linear_regression(array, from_to = (30, 150)):
-
-    '''
-    Linear regression helper function, for finding slopes
-    '''
-
-    measure_area = array[from_to[0]:from_to[1], :]
-    x = measure_area[:, 1]
-    y = measure_area[:, 0]
-
-    slope = (len(x) * np.sum(x*y) - np.sum(x) * np.sum(y)) / (len(x)*np.sum(x*x) - np.sum(x) ** 2)
-    intercept = (np.sum(y) - slope *np.sum(x)) / len(x)
-
-    return slope, intercept
 
 
 # Main processing flow
@@ -206,23 +219,28 @@ meta_list = []
 strength_list = []
 slope_list = []
 
+tables_list = []
+if os.path.isfile(args.file):
+    tables_list.append(Table(args.file))
+
 if args.select:
     select_split = str.split(args.select, ',')
     for elem in select_split:
         batch = int(str.split(elem, '-')[0])
         subbatch = int(str.split(elem, '-')[1])
         if len(str.split(elem, '-')) == 3:
-            result = truncate_at(calculate(fetch_raw(batch, subbatch), find_dimensions(batch, subbatch)), int(str.split(elem, '-')[2]))
+            result = truncate_at(tables_list[0].get(int(str.split(elem, '-')[0]), int(str.split(elem, '-')[1])), int(str.split(elem, '-')[2]))
         else:
-            result = calculate(fetch_raw(batch, subbatch), find_dimensions(batch, subbatch))
+            result = tables_list[0].get(int(str.split(elem, '-')[0]), int(str.split(elem, '-')[1]))
+
         result_list.append(result)
         strength_list.append(max_stress(result)[0])
         meta_list.append((batch, subbatch))
 
 else:
-    for i in range (0, batch_count):
-        for j in range(0, subbatch_count):
-            result = calculate(fetch_raw(i + 1, j + 1), find_dimensions(i + 1, j + 1))
+    for i in range (0, tables_list[0].batch_count):
+        for j in range(0, tables_list[0].subbatch_count):
+            result = tables_list[0].get(i+1, j+1)
             result_list.append(result)
             strength_list.append(max_stress(result)[0])
             meta_list.append((i+1, j+1))
