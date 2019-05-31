@@ -155,6 +155,12 @@ class Table:
 
 
 # Plotting function
+font = {'family' : 'Monospace',
+        'weight' : 'bold',
+        'size'   : 14}
+
+plt.rc('font', **font)
+
 def plot_array(array_list, compose_mode = 'combined', **kwargs):
 
     '''
@@ -185,12 +191,12 @@ def plot_array(array_list, compose_mode = 'combined', **kwargs):
                 for elem in meta_map:
                     tablename = os.path.splitext(os.path.split(elem[0])[1])[0]
                     legend_list.append(tablename + '-' + str(elem[1])  + '-' + str(elem[2]))
-                plt.legend(legend_list, loc='upper left')
+                plt.legend(legend_list, loc='best')
             
         plt.axis(xmin=0, ymin=0)
         plt.ylabel('Stress [MPa]')
         plt.xlabel('Strain')
-        plt.savefig("%s.png" % os.path.splitext(args.file)[0])
+        plt.savefig("%s.png" % os.path.splitext(kwargs.get('meta_map')[0][0])[0])
 
     elif compose_mode == 'alone':
         count = 1
@@ -215,6 +221,7 @@ def plot_array(array_list, compose_mode = 'combined', **kwargs):
 
 # Main processing flow
 
+tables_list = []    # List all table objects
 result_list = []    # List of processed results
 meta_list = []  # Metadata of processed results: [(table_name, batch_num, subbatch_num),]
 strength_list = []
@@ -222,7 +229,7 @@ slope_list = []
 
 def cache(table, select_str = ''):
     if select_str != '':
-        select_split = str.split(args.select, ',')
+        select_split = str.split(select_str, ',')
         for elem in select_split:
             batch = int(str.split(elem, '-')[0])
             subbatch = int(str.split(elem, '-')[1])
@@ -240,12 +247,25 @@ def cache(table, select_str = ''):
                 result_list.append(result)
                 strength_list.append(max_stress(result)[0])
                 meta_list.append((table.tablename, i+1, j+1))
+                
+def analysis():
+    for elem in result_list:
+        if args.slope_range:
+            slope_range = (int(str.split(args.slope_range, ',')[0]), int(str.split(args.slope_range, ',')[1]))
+            slope_list.append(linear_regression(elem, from_to=slope_range)[0])
+        else:
+            slope_list.append(linear_regression(elem)[0])
+
+    logger.info("Young's modulus for selected samples: %f, standard deviation: %f" % (np.average(slope_list), np.std(slope_list)))
+    logger.info("UTS for selected samples: %f, standard deviation: %f" % (np.average(strength_list), np.std(strength_list)))
+
 
 if args.interactive != True and args.file:
 
-    tables_list = []
     if os.path.isfile(args.file):
         tables_list.append(Table(args.file))
+    else:
+        logger.error("Unable to open %s, exit." % args.file)
 
     if args.select:
 
@@ -255,15 +275,7 @@ if args.interactive != True and args.file:
 
         cache(tables_list[0])
 
-    for elem in result_list:
-        if args.slope_range:
-            slope_range = (int(str.split(args.slope_range, ',')[0]), int(str.split(args.slope_range, ',')[1]))
-            slope_list.append(linear_regression(elem, from_to=slope_range)[0])
-        else:
-            slope_list.append(linear_regression(elem)[0])
-
-    logger.info("Young's modulus for plotted samples: %f, standard deviation: %f" % (np.average(slope_list), np.std(slope_list)))
-    logger.info("UTS for plotted samples: %f, standard deviation: %f" % (np.average(strength_list), np.std(strength_list)))
+    analysis()
 
     if args.compose_mode:
         plot_array(result_list, compose_mode=args.compose_mode, meta_map = meta_list, legends = args.legend)
@@ -275,24 +287,72 @@ elif args.interactive == True:
     # Interactive mode
 
     while(True):
-        main_operation = input("Enter action: open/exit\n")
+        main_operation = input("Enter action: open/output/analysis/exit\n")
 
         if main_operation == 'open':
-            filename = input("Enter file name:\n")
-            if os.path.isfile(filename):
-                tables_list.append(Table(filename))
-
-                select = input("Select samples, or input 'all' to select all. Format: batch-subbatch, batch-subbatch")
-                if select == 'all':
-                    pass
+            while(True): 
+                filename = input("Enter file name, or press enter to return:\n")
+                if os.path.isfile(filename):
+                    working_table = Table(filename)
+                    tables_list.append(working_table)                
+                    while(True):
+                        select = input("Select samples, or input 'all' to select all. Format: batch-subbatch-truncate_at, batch-subbatch,... Press enter to return\n")
+                        if select == 'all':
+                            cache(working_table)
+                            print("Selection has been successfully cached.")
+                            break
+                        elif select == '':
+                            break
+                        else:                   
+                            try:
+                                print(select)
+                                cache(working_table, select)
+                                print("Selection has been successfully cached.")
+                                break
+                            except Exception as e:
+                                logger.error("Error happened during cache process. Check selection string.")
+                                logger.debug(str(e))
+                                continue
+                elif filename == '':
+                    break
                 else:
-                    pass
-            else:
-                print("%s: not found. Try again.")
-                break
+                    continue
+
         elif main_operation == 'exit':
             print("Exit now.")
             break
+        elif main_operation =='output':
+            legend = False
+            while(True):
+                legend_input = input("Turn on legends (default = no)? yes/no\n")
+                if legend_input == 'yes':
+                    legend = True
+                    break
+                elif legend_input == 'no':
+                    break
+                else:
+                    if legend_input == '':
+                        break
+                    else:
+                        print("Type 'yes' or 'no'.\n")
+            
+            compose_mode = 'combined'
+            while(True):
+                compose_mode_input = input("Input compose mode (default = combined). combined/alone\n")
+                if compose_mode_input == 'combined':
+                    legend = True
+                    break
+                elif compose_mode_input == 'alone':
+                    break
+                else:
+                    if compose_mode_input == '':
+                        break
+                    else:
+                        print("Type combined/alone .\n")            
+            plot_array(result_list, compose_mode=compose_mode, meta_map = meta_list, legends = legend)
+                    
+        elif main_operation =='analysis':
+            analysis()
         else:
             print("Invalid action.")
 else:
