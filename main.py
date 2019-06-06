@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Tensile_auto: Tensile data analysis assistance tool for Shimazu
+# TenTackle: Tensile data analysis assistance tool for Shimazu
 
 import os
 import csv
@@ -10,14 +10,14 @@ import matplotlib.pyplot as plt
 import math
 
 # Initialize Argument Parser (argparse)
-parser = argparse.ArgumentParser(description='Tensile_auto: Tensile data analysis assisting tool for Shimazu.')
+parser = argparse.ArgumentParser(description='TenTackle: Tensile data analysis assisting tool for Shimazu.')
 parser.add_argument("-f", "--file", help="Specifies the .csv file to be processed")
 parser.add_argument("-i", "--interactive", help="Use interactive mode", action="store_true")
 parser.add_argument("-v", "--verbose", help="Increase output verbosity", action="store_true")
 parser.add_argument("-l", "--legend", help="Switch on/off legends", action="store_true")
 parser.add_argument("-c", "--compose_mode", help="Specifies how to organize plotted curves of different samples. Available options: combined, alone, sub")
 parser.add_argument("-s", "--select", help="Specifies which samples are to be plotted. Format: batch-subbatch(-truncate_percentage),batch-subbatch")
-parser.add_argument("-r", "--slope_range", help="Specifies the range of dots for slope/modulus measurement. Format: start,end")
+parser.add_argument("-r", "--slope_range", help="Specifies the range of data for slope/modulus measurement. Format: start_strain,end_strain")
 args = parser.parse_args()
 
 # Logging settings
@@ -58,13 +58,22 @@ def truncate_at(array, percentage):
 
     return array[0:truncated_len, :]
 
-def linear_regression(array, from_to = (30, 150)):
+def linear_regression(array, from_to = (0.001, 0.01)):
 
     '''
     Linear regression helper function, for finding slopes
+
+    array: np_array, data source of linear regression
+    from_to: tuple, (from_x_equals_to_value, to_x_equals_to_value)
+        Example: (0.1, 0.2) means select a part of the array from x=0.1 to x=0.2, and calculate linear regression for this part.
     '''
 
-    measure_area = array[from_to[0]:from_to[1], :]
+    start_idx = idx_of_nearest(array[:, 0], from_to[0])
+    end_idx = idx_of_nearest(array[:, 1], from_to[1])
+
+    logger.debug("From, to: %d, %d" % (start_idx, end_idx))
+
+    measure_area = array[start_idx:end_idx, :]
     x = measure_area[:, 1]
     y = measure_area[:, 0]
 
@@ -82,6 +91,16 @@ def max_stress(array):
     max_stress = np.amax(array, axis=0)
     return max_stress   # max_stress: tuple, with stress and corresponding strain info
 
+def idx_of_nearest(array_1d, target):
+
+    '''
+    Find the index of value nearest to target in a 1d array.
+    '''
+
+    return (np.abs(array_1d - target)).argmin()
+
+
+# Data structures
 class Table:
 
     '''
@@ -127,7 +146,7 @@ class Table:
         width = float(self.tables[2][3+sample_number][2])
         length = float(self.tables[2][3+sample_number][3])
 
-        logger.debug("Demensions for batch %d, subbatch %d: %s" % (batch, subbatch, (thickness, width, length)))
+        logger.debug("Dimensions for batch %d, subbatch %d: %s" % (batch, subbatch, (thickness, width, length)))
 
         return thickness, width, length
 
@@ -248,9 +267,9 @@ def cache(table, select_str = ''):
                 strength_list.append(max_stress(result)[0])
                 meta_list.append((table.tablename, i+1, j+1))
                 
-def analysis():
+def analysis(slope_range = None):
     for elem in result_list:
-        if args.slope_range:
+        if slope_range != None:
             slope_range = (int(str.split(args.slope_range, ',')[0]), int(str.split(args.slope_range, ',')[1]))
             slope_list.append(linear_regression(elem, from_to=slope_range)[0])
         else:
@@ -261,6 +280,8 @@ def analysis():
 
 
 if args.interactive != True and args.file:
+
+    # Command line mode processing flow
 
     if os.path.isfile(args.file):
         tables_list.append(Table(args.file))
@@ -275,7 +296,7 @@ if args.interactive != True and args.file:
 
         cache(tables_list[0])
 
-    analysis()
+    analysis(args.slope_range)
 
     if args.compose_mode:
         plot_array(result_list, compose_mode=args.compose_mode, meta_map = meta_list, legends = args.legend)
