@@ -26,7 +26,7 @@ logger = logging.getLogger(name='global')
 if args.verbose:
     logger.setLevel(level=logging.DEBUG)
 else:
-    logger.setLevel(level=logging.INFO)
+    logger.setLevel(level=logging.ERROR)
 ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
 logger.addHandler(ch)
@@ -225,6 +225,7 @@ def plot_array(array_list, compose_mode = 'combined', **kwargs):
             - format: [(table_name, batch_num, subbatch_num),]
         - sub_width: int, specifies how many subplots should be in a row
         - legends: bool, switch on/off legends
+        - preview: bool, use preview mode
     '''
 
     if compose_mode == 'combined':
@@ -232,7 +233,7 @@ def plot_array(array_list, compose_mode = 'combined', **kwargs):
         for array in array_list:
             plt.plot(array[:, 1]/config['axis_cont']['x_scaling'], array[:, 0]/config['axis_cont']['y_scaling'])
         # Generate legend according to meta_map
-        if kwargs['legends']:
+        if kwargs.get('legends') or kwargs.get('preview'):
             if kwargs.get('meta_map') != None:
                 meta_map = kwargs.get('meta_map')
                 legend_list = []
@@ -244,7 +245,10 @@ def plot_array(array_list, compose_mode = 'combined', **kwargs):
         plt.axis(xmin=0, ymin=0)
         plt.ylabel('Stress [%s]' % config.get('axis_cont').get('y_unit'))
         plt.xlabel('Strain [%s]' % config.get('axis_cont').get('x_unit'))
-        plt.savefig("%s.png" % os.path.splitext(kwargs.get('meta_map')[0][0])[0])
+        if kwargs.get('preview'):
+            plt.show()
+        else:
+            plt.savefig("%s.png" % os.path.splitext(kwargs.get('meta_map')[0][0])[0])
 
     elif compose_mode == 'alone':
         count = 1
@@ -271,7 +275,7 @@ def plot_array(array_list, compose_mode = 'combined', **kwargs):
 
 tables_list = []    # List all table objects
 result_list = []    # List of processed results
-meta_list = []  # Metadata of processed results: [(table_name, batch_num, subbatch_num),]
+meta_list = []    # Metadata of processed results: [(table_name, batch_num, subbatch_num),]
 strength_list = []
 slope_list = []
 
@@ -337,7 +341,7 @@ elif args.interactive == True:
     # Interactive mode
 
     while(True):
-        main_operation = input("Enter action: open/output/analysis/clear/exit\n")
+        main_operation = input("Enter action: open/preview/output/analysis/clear/exit\n")
 
         if main_operation == 'open':
             while(True): 
@@ -366,6 +370,7 @@ elif args.interactive == True:
                 elif filename == '':
                     break
                 else:
+                    logger.error("File not found: %s" % filename)
                     continue
 
         elif main_operation == 'exit':
@@ -374,17 +379,17 @@ elif args.interactive == True:
         elif main_operation =='output':
             legend = False
             while(True):
-                legend_input = input("Turn on legends (default = no)? yes/no\n")
-                if legend_input == 'yes':
+                legend_input = input("Turn on legends (default = no)? y/n\n")
+                if legend_input == 'y':
                     legend = True
                     break
-                elif legend_input == 'no':
+                elif legend_input == 'n':
                     break
                 else:
                     if legend_input == '':
                         break
                     else:
-                        print("Type 'yes' or 'no'.\n")
+                        print("Type 'y' or 'n'.\n")
             
             compose_mode = 'combined'
             while(True):
@@ -402,7 +407,15 @@ elif args.interactive == True:
             plot_array(result_list, compose_mode=compose_mode, meta_map = meta_list, legends = legend)
                     
         elif main_operation =='analysis':
-            analysis()
+            if meta_list != []:
+                analysis()
+            else:
+                logger.error("No selection in cache!")
+        elif main_operation =='preview':
+            if meta_list != []:
+                plot_array(result_list, meta_map = meta_list, preview = True)
+            else:
+                logger.error("No selection in cache!")
         elif main_operation =='clear':
             tables_list = []
             result_list = []
