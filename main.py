@@ -8,6 +8,7 @@ import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 import math
+import json
 
 # Initialize Argument Parser (argparse)
 parser = argparse.ArgumentParser(description='TenTackle: Tensile data analysis assisting tool for Shimazu.')
@@ -36,6 +37,35 @@ if args.verbose:
 if args.interactive:
     logger.debug("Interactive mode: on")
 
+# Read config file
+config = {}
+
+if os.path.isfile("config.json"):
+
+    '''
+    Use external config first
+    '''
+    with open("config.json") as config_file:
+        config = json.load(config_file)
+else:
+
+    '''
+    If external config not found, fallback to embedded config
+    '''
+
+    config = {
+        "axis_cont":{
+            "y_unit": "MPa",
+            "y_scaling": 1,
+            "x_unit": "",
+            "x_scaling": 1
+        },
+        "font_cfg":{
+            "family" : "Monospace",
+            "weight" : "bold",
+            "size"   : 14
+        }
+}
 
 # Helper functions: functions that accepts a procecced stress/strain data array
 def calculate(array, dimensions):  
@@ -95,6 +125,7 @@ def idx_of_nearest(array_1d, target):
 
     '''
     Find the index of value nearest to target in a 1d array.
+    Only 1d array should be given as param; otherwise would not give correct result
     '''
 
     return (np.abs(array_1d - target)).argmin()
@@ -174,9 +205,7 @@ class Table:
 
 
 # Plotting function
-font = {'family' : 'Monospace',
-        'weight' : 'bold',
-        'size'   : 14}
+font = config['font_cfg']
 
 plt.rc('font', **font)
 
@@ -201,7 +230,7 @@ def plot_array(array_list, compose_mode = 'combined', **kwargs):
     if compose_mode == 'combined':
         # Plot arrays in array_list
         for array in array_list:
-            plt.plot(array[:, 1], array[:, 0])
+            plt.plot(array[:, 1]/config['axis_cont']['x_scaling'], array[:, 0]/config['axis_cont']['y_scaling'])
         # Generate legend according to meta_map
         if kwargs['legends']:
             if kwargs.get('meta_map') != None:
@@ -213,18 +242,18 @@ def plot_array(array_list, compose_mode = 'combined', **kwargs):
                 plt.legend(legend_list, loc='best')
             
         plt.axis(xmin=0, ymin=0)
-        plt.ylabel('Stress [MPa]')
-        plt.xlabel('Strain')
+        plt.ylabel('Stress [%s]' % config.get('axis_cont').get('y_unit'))
+        plt.xlabel('Strain [%s]' % config.get('axis_cont').get('x_unit'))
         plt.savefig("%s.png" % os.path.splitext(kwargs.get('meta_map')[0][0])[0])
 
     elif compose_mode == 'alone':
         count = 1
         for array in array_list:
             plt.figure(count)
-            plt.plot(array[:, 1], array[:, 0])
+            plt.plot(array[:, 1]/config['axis_cont']['x_scaling'], array[:, 0]/config['axis_cont']['y_scaling'])
             plt.axis(xmin=0, ymin=0)
-            plt.ylabel('Stress [MPa]')
-            plt.xlabel('Strain')
+            plt.ylabel('Stress [%s]' % config.get('axis_cont').get('y_unit'))
+            plt.xlabel('Strain [%s]' % config.get('axis_cont').get('x_unit'))
             if kwargs.get('meta_map') != None:
                 meta_map = kwargs.get('meta_map')
                 plt.savefig(os.path.join(os.path.dirname(args.file), "%s-%d-%d.png" % (meta_map[count-1][0], meta_map[count-1][1], meta_map[count-1][2])))
@@ -308,7 +337,7 @@ elif args.interactive == True:
     # Interactive mode
 
     while(True):
-        main_operation = input("Enter action: open/output/analysis/exit\n")
+        main_operation = input("Enter action: open/output/analysis/clear/exit\n")
 
         if main_operation == 'open':
             while(True): 
@@ -374,17 +403,13 @@ elif args.interactive == True:
                     
         elif main_operation =='analysis':
             analysis()
+        elif main_operation =='clear':
+            tables_list = []
+            result_list = []
+            meta_list = []
+            strength_list = []
+            slope_list = []
         else:
             print("Invalid action.")
 else:
     logger.error("No file specified. Exit.\n Use -h for help.")
-
-
-
-# Testing code
-
-# arr = calculate(fetch_raw(1,1), find_dimensions(1,1))
-# plot_array([calculate(fetch_raw(1,1), find_dimensions(1,1)), calculate(fetch_raw(1,2), find_dimensions(1,2))], compose_mode='combined', meta_map = [(1,1), (1,2)])
-# print("Max stress: " + str(max_stress(arr)))
-# print(arr.shape)
-# print(truncate_at(arr, 0.9).shape)

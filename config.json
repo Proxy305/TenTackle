@@ -1,0 +1,14 @@
+{
+    "axis_cont":{
+        "y_unit": "MPa",
+        "y_scaling": 1,
+        "x_unit": "%",
+        "x_scaling": 0.01
+    },
+    "font_cfg":{
+        "family" : "Monospace",
+        "weight" : "bold",
+        "size"   : 14
+    }
+
+}
