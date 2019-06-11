@@ -54,16 +54,20 @@ else:
     '''
 
     config = {
-        "axis_cont":{
+        "axis":{
             "y_unit": "MPa",
             "y_scaling": 1,
             "x_unit": "",
             "x_scaling": 1
         },
-        "font_cfg":{
+        "font":{
             "family" : "Monospace",
             "weight" : "bold",
             "size"   : 14
+        },
+        "regression":{
+            "start": 0.001,
+            "end": 0.01           
         }
 }
 
@@ -88,7 +92,7 @@ def truncate_at(array, percentage):
 
     return array[0:truncated_len, :]
 
-def linear_regression(array, from_to = (0.001, 0.01)):
+def linear_regression(array, from_to = (config['regression']['start'], config['regression']['end'])):
 
     '''
     Linear regression helper function, for finding slopes
@@ -205,7 +209,7 @@ class Table:
 
 
 # Plotting function
-font = config['font_cfg']
+font = config['font']
 
 plt.rc('font', **font)
 
@@ -231,7 +235,7 @@ def plot_array(array_list, compose_mode = 'combined', **kwargs):
     if compose_mode == 'combined':
         # Plot arrays in array_list
         for array in array_list:
-            plt.plot(array[:, 1]/config['axis_cont']['x_scaling'], array[:, 0]/config['axis_cont']['y_scaling'])
+            plt.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
         # Generate legend according to meta_map
         if kwargs.get('legends') or kwargs.get('preview'):
             if kwargs.get('meta_map') != None:
@@ -243,8 +247,8 @@ def plot_array(array_list, compose_mode = 'combined', **kwargs):
                 plt.legend(legend_list, loc='best')
             
         plt.axis(xmin=0, ymin=0)
-        plt.ylabel('Stress [%s]' % config.get('axis_cont').get('y_unit'))
-        plt.xlabel('Strain [%s]' % config.get('axis_cont').get('x_unit'))
+        plt.ylabel('Stress [%s]' % config.get('axis').get('y_unit'))
+        plt.xlabel('Strain [%s]' % config.get('axis').get('x_unit'))
         if kwargs.get('preview'):
             plt.show()
         else:
@@ -254,10 +258,10 @@ def plot_array(array_list, compose_mode = 'combined', **kwargs):
         count = 1
         for array in array_list:
             plt.figure(count)
-            plt.plot(array[:, 1]/config['axis_cont']['x_scaling'], array[:, 0]/config['axis_cont']['y_scaling'])
+            plt.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
             plt.axis(xmin=0, ymin=0)
-            plt.ylabel('Stress [%s]' % config.get('axis_cont').get('y_unit'))
-            plt.xlabel('Strain [%s]' % config.get('axis_cont').get('x_unit'))
+            plt.ylabel('Stress [%s]' % config.get('axis').get('y_unit'))
+            plt.xlabel('Strain [%s]' % config.get('axis').get('x_unit'))
             if kwargs.get('meta_map') != None:
                 meta_map = kwargs.get('meta_map')
                 plt.savefig(os.path.join(os.path.dirname(args.file), "%s-%d-%d.png" % (meta_map[count-1][0], meta_map[count-1][1], meta_map[count-1][2])))

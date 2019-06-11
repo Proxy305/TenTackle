@@ -112,7 +112,6 @@ Then follow the instructions on screen.
 **Note**: All command line arguments, excluding `-v` will be ignored if parameter `-i` is given.
 
 ## Todo
-- Add slope range selection to config file
 - Add slope range selection for interactive mode
 
 ## Disclaimer

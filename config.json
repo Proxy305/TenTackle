@@ -1,14 +1,18 @@
 {
-    "axis_cont":{
+    "axis":{
         "y_unit": "MPa",
         "y_scaling": 1,
         "x_unit": "%",
         "x_scaling": 0.01
     },
-    "font_cfg":{
+    "font":{
         "family" : "Monospace",
         "weight" : "bold",
         "size"   : 14
+    },
+    "regression":{
+        "start": 0.001,
+        "end": 0.01
     }
 
 }
