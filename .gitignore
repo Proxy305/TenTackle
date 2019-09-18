@@ -1,3 +1,6 @@
 test.*
+.DS_Store
+*.html
+*.zip
 
 /.vscode

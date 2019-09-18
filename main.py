@@ -255,19 +255,19 @@ def plot_array(array_list, compose_mode = 'combined', **kwargs):
             plt.savefig("%s.png" % os.path.splitext(kwargs.get('meta_map')[0][0])[0])
 
     elif compose_mode == 'alone':
-        count = 1
-        for array in array_list:
-            plt.figure(count)
-            plt.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
+        for i in range(0, len(array_list)):
+            logger.debug(len(array_list))
+            plt.figure(i)
+            plt.plot(array_list[i][:, 1]/config['axis']['x_scaling'], array_list[i][:, 0]/config['axis']['y_scaling'])
             plt.axis(xmin=0, ymin=0)
             plt.ylabel('Stress [%s]' % config.get('axis').get('y_unit'))
             plt.xlabel('Strain [%s]' % config.get('axis').get('x_unit'))
             if kwargs.get('meta_map') != None:
                 meta_map = kwargs.get('meta_map')
-                plt.savefig(os.path.join(os.path.dirname(args.file), "%s-%d-%d.png" % (meta_map[count-1][0], meta_map[count-1][1], meta_map[count-1][2])))
+                logger.debug(os.path.splitext(kwargs.get('meta_map')[i][0])[0])
+                plt.savefig(os.path.splitext(kwargs.get('meta_map')[i][0])[0] + "%d-%d.png" % (meta_map[i-1][1], meta_map[i][2]))
             else:
-                plt.savefig(os.path.join(os.path.dirname(args.file), "%s-%d.png" % (os.path.splitext(args.file)[0], count)))    # If meta_map is not specified, then it should not be in interactive mode and only have 1 file/table working, so args.file is used as a dirty hack
-            count += 1  
+                plt.savefig(os.path.join(os.path.dirname(args.file), "%s-%d.png" % (os.path.splitext(args.file)[0], i)))    # If meta_map is not specified, then it should not be in interactive mode and only have 1 file/table working, so args.file is used as a dirty hack
     elif compose_mode == 'sub':
         pass
     else:
@@ -402,6 +402,7 @@ elif args.interactive == True:
                     legend = True
                     break
                 elif compose_mode_input == 'alone':
+                    compose_mode = 'alone'
                     break
                 else:
                     if compose_mode_input == '':
