@@ -204,8 +204,12 @@ class Table:
         '''
         Get processed strain/stress data
         '''
-
-        return calculate(self.raw(batch, subbatch), self.dimensions(batch, subbatch))
+        try:
+            return calculate(self.raw(batch, subbatch), self.dimensions(batch, subbatch))
+        except IndexError:
+            logger.warn("Batch %d subbatch %d declared in data, but not found. Skipping." % (batch, subbatch))
+            raise
+        
 
 
 # Plotting function
@@ -292,14 +296,23 @@ def cache(table, select_str = ''):
             if len(str.split(elem, '-')) == 3:
                 result = truncate_at(table.get(batch, subbatch), int(str.split(elem, '-')[2]))
             else:
-                result = table.get(batch, subbatch)
+                try:
+                    result = table.get(batch, subbatch)
+                except IndexError:
+                    logger.warn("Batch %d subbatch %d not found. Skipping." % (batch, subbatch))
+                    continue
+                
             meta_list.append((table.tablename, batch, subbatch))
             result_list.append(result)
             strength_list.append(max_stress(result)[0])
     else:
         for i in range (0, table.batch_count):
             for j in range(0, table.subbatch_count):
-                result = table.get(i+1, j+1)
+                try:
+                    result = table.get(i+1, j+1)
+                except IndexError:
+                    logger.warn("Batch %d subbatch %d not found. Skipping." % (i, j))
+                    continue
                 result_list.append(result)
                 strength_list.append(max_stress(result)[0])
                 meta_list.append((table.tablename, i+1, j+1))
