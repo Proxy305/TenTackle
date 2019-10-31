@@ -304,7 +304,7 @@ def cache(table, select_str = ''):
                 
             meta_list.append((table.tablename, batch, subbatch))
             result_list.append(result)
-            strength_list.append(max_stress(result)[0])
+            strength_list.append(max_stress(result))
     else:
         for i in range (0, table.batch_count):
             for j in range(0, table.subbatch_count):
@@ -314,7 +314,7 @@ def cache(table, select_str = ''):
                     logger.warn("Batch %d subbatch %d not found. Skipping." % (i, j))
                     continue
                 result_list.append(result)
-                strength_list.append(max_stress(result)[0])
+                strength_list.append(max_stress(result))
                 meta_list.append((table.tablename, i+1, j+1))
                 
 def analysis(slope_range = None):
@@ -325,8 +325,42 @@ def analysis(slope_range = None):
         else:
             slope_list.append(linear_regression(elem)[0])
 
-    logger.info("Young's modulus for selected samples: %f, standard deviation: %f" % (np.average(slope_list), np.std(slope_list)))
-    logger.info("UTS for selected samples: %f, standard deviation: %f" % (np.average(strength_list), np.std(strength_list)))
+    strength_array = np.array(strength_list)
+
+    analysis_result = {
+
+        '''
+            Dictionary object of analysis result
+        '''
+
+        'ym':{  
+
+            # Young's Modulus
+
+            'value': np.average(slope_list),
+            'std': np.std(slope_list)
+        },
+        'uts':{
+
+            # Ultimate tensile strength
+
+            'value': np.average(strength_array[:, 0]),
+            'std': np.std(strength_array[:, 0])
+        },
+        'sams':{
+
+            # Strain at maximum stress
+
+            'value': np.average(strength_array[:, 1]),
+            'std': np.std(strength_array[:, 1])
+
+        }
+    }
+    logger.debug(analysis_result.keys())
+    logger.info("Young's modulus for selected samples: %f, standard deviation: %f" % (analysis_result['ym']['value'], analysis_result['ym']['std']))
+    
+    logger.info("UTS for selected samples: %f, standard deviation: %f" % (analysis_result["uts"]["value"], analysis_result["uts"]["std"]))
+    logger.info("Strain at maximum stress for selected sampexitles: %f, standard deviation: %f" % (analysis_result["sams"]["value"], analysis_result["sams"]["std"]))
 
 
 if args.interactive != True and args.file:
