@@ -63,7 +63,7 @@ else:
         "font":{
             "family" : "Monospace",
             "weight" : "bold",
-            "size"   : 14
+            "size"   : 12
         },
         "regression":{
             "start": 0.001,
@@ -237,9 +237,18 @@ def plot_array(array_list, compose_mode = 'combined', **kwargs):
     '''
 
     if compose_mode == 'combined':
+        fig = plt.figure()
+        main_plt = fig.add_axes([0.1, 0.15, 0.7, 0.7])
+
         # Plot arrays in array_list
         for array in array_list:
-            plt.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
+            main_plt.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
+
+        # Set axis labels 
+        main_plt.axis(xmin=0, ymin=0)
+        main_plt.set(ylabel = 'Stress [%s]' % config.get('axis').get('y_unit'), xlabel = 'Strain [%s]' % config.get('axis').get('x_unit'))
+        # main_plt.set_xlabel('Strain [%s]' % config.get('axis').get('x_unit'))
+
         # Generate legend according to meta_map
         if kwargs.get('legends') or kwargs.get('preview'):
             if kwargs.get('meta_map') != None:
@@ -248,15 +257,19 @@ def plot_array(array_list, compose_mode = 'combined', **kwargs):
                 for elem in meta_map:
                     tablename = os.path.splitext(os.path.split(elem[0])[1])[0]
                     legend_list.append(tablename + '-' + str(elem[1])  + '-' + str(elem[2]))
-                plt.legend(legend_list, loc='best')
-            
-        plt.axis(xmin=0, ymin=0)
-        plt.ylabel('Stress [%s]' % config.get('axis').get('y_unit'))
-        plt.xlabel('Strain [%s]' % config.get('axis').get('x_unit'))
+                
+                box = main_plt.get_position()
+                main_plt.set_position([box.x0, box.y0, box.width*0.65, box.height])
+
+                main_plt.legend(legend_list, bbox_to_anchor=(1.05,1), borderaxespad=0.)
+
+
+
+        # Output the plot, either show or save to file
         if kwargs.get('preview'):
             plt.show()
         else:
-            plt.savefig("%s.png" % os.path.splitext(kwargs.get('meta_map')[0][0])[0])
+            plt.savefig("%s.png" % os.path.splitext(kwargs.get('meta_map')[0][0])[0], bbox_inches='tight')
 
     elif compose_mode == 'alone':
         for i in range(0, len(array_list)):
@@ -287,37 +300,48 @@ meta_list = []    # Metadata of processed results: [(table_name, batch_num, subb
 strength_list = []
 slope_list = []
 
-def cache(table, select_str = ''):
+def cache(table_file, select_str = ''):
+
+    '''
+        Cache tables by table file and optional select string
+    '''
+
+
     if select_str != '':
         select_split = str.split(select_str, ',')
         for elem in select_split:
             batch = int(str.split(elem, '-')[0])
             subbatch = int(str.split(elem, '-')[1])
             if len(str.split(elem, '-')) == 3:
-                result = truncate_at(table.get(batch, subbatch), int(str.split(elem, '-')[2]))
+                result = truncate_at(table_file.get(batch, subbatch), int(str.split(elem, '-')[2]))
             else:
                 try:
-                    result = table.get(batch, subbatch)
+                    result = table_file.get(batch, subbatch)
                 except IndexError:
                     logger.warn("Batch %d subbatch %d not found. Skipping." % (batch, subbatch))
                     continue
                 
-            meta_list.append((table.tablename, batch, subbatch))
+            meta_list.append((table_file.tablename, batch, subbatch))
             result_list.append(result)
             strength_list.append(max_stress(result))
     else:
-        for i in range (0, table.batch_count):
-            for j in range(0, table.subbatch_count):
+        for i in range (0, table_file.batch_count):
+            for j in range(0, table_file.subbatch_count):
                 try:
-                    result = table.get(i+1, j+1)
+                    result = table_file.get(i+1, j+1)
                 except IndexError:
                     logger.warn("Batch %d subbatch %d not found. Skipping." % (i, j))
                     continue
                 result_list.append(result)
                 strength_list.append(max_stress(result))
-                meta_list.append((table.tablename, i+1, j+1))
+                meta_list.append((table_file.tablename, i+1, j+1))
                 
 def analysis(slope_range = None):
+
+    '''
+        Analyze critical properties of curves
+    '''
+
     for elem in result_list:
         if slope_range != None:
             slope_range = (int(str.split(args.slope_range, ',')[0]), int(str.split(args.slope_range, ',')[1]))
@@ -327,11 +351,7 @@ def analysis(slope_range = None):
 
     strength_array = np.array(strength_list)
 
-    analysis_result = {
-
-        '''
-            Dictionary object of analysis result
-        '''
+    analysis_result = { # Dictionary object of analysis result
 
         'ym':{  
 
@@ -360,7 +380,9 @@ def analysis(slope_range = None):
     logger.info("Young's modulus for selected samples: %f, standard deviation: %f" % (analysis_result['ym']['value'], analysis_result['ym']['std']))
     
     logger.info("UTS for selected samples: %f, standard deviation: %f" % (analysis_result["uts"]["value"], analysis_result["uts"]["std"]))
-    logger.info("Strain at maximum stress for selected sampexitles: %f, standard deviation: %f" % (analysis_result["sams"]["value"], analysis_result["sams"]["std"]))
+    logger.info("Strain at maximum stress for selected samples: %f, standard deviation: %f" % (analysis_result["sams"]["value"], analysis_result["sams"]["std"]))
+
+    return analysis_result
 
 
 if args.interactive != True and args.file:
@@ -401,10 +423,10 @@ elif args.interactive == True:
                     working_table = Table(filename)
                     tables_list.append(working_table)                
                     while(True):
-                        select = input("Select samples, or input 'all' to select all. Format: batch-subbatch-truncate_at, batch-subbatch,... Press enter to return\n")
+                        select = input("Select data of samples, or input 'all' to select all. Format: batch-subbatch-truncate_at, batch-subbatch,... Press enter to return\n")
                         if select == 'all':
                             cache(working_table)
-                            print("Selection has been successfully cached.")
+                            print("Data of all samples has been successfully cached.")
                             break
                         elif select == '':
                             break
