@@ -11,8 +11,6 @@ import math
 import json
 
 
-
-
 # Read config file
 config = {}
 
@@ -123,6 +121,7 @@ class Table:
         super().__init__()
         
         self.tables = []    # Keeps all table raw infomation
+        self.file_name = filename
 
         # Split multiple tables in single .csv file
         with open(filename, newline='', encoding='Shift-JIS') as f:
@@ -139,7 +138,7 @@ class Table:
 
         # Define table name, if not specified manually
         if tablename == '':
-            self._table_name = filename
+            self._table_name = str.split(str.split(filename, '/')[-1], '.')[-2]
         else:
             self._table_name = tablename
 
@@ -304,7 +303,6 @@ class Curve_cache():
             for batch in range (1, table.batch_count+1):
                 for subbatch in range(1, table.subbatch_count+1):
                     if table.get_curve_data(batch, subbatch, dry_run = True) == True:
-                        print(table.get_curve_data(batch, subbatch))
                         self._cache.append(Curve(table, batch, subbatch))
             
 
@@ -351,10 +349,8 @@ class Curve_cache():
             logger.error('No selection in curve cache "%s"' % self.name)
             return 0
 
-        print("total length %d" % len(self._cache))
 
         for curve in self._cache:
-            print("curve: %s %d %d" % (curve.table, curve.batch, curve.subbatch))
             strength_pool.append(curve.max_stress)
             slope_pool.append(curve.slope)
 
@@ -396,9 +392,6 @@ class Curve_cache():
         
         
 # Plotting function
-font = config['font']
-
-plt.rc('font', **font)
 
 def plot_array_cmd(curves_list, compose_mode = None, **kwargs):
 
@@ -434,7 +427,7 @@ def plot_array_cmd(curves_list, compose_mode = None, **kwargs):
         main_plt.set(ylabel = 'Stress [%s]' % config.get('axis').get('y_unit'), xlabel = 'Strain [%s]' % config.get('axis').get('x_unit'))
         # main_plt.set_xlabel('Strain [%s]' % config.get('axis').get('x_unit'))
 
-        # Generate legend according to meta_map
+        # Generate legends
         if kwargs.get('legends') or kwargs.get('preview'):              
             box = main_plt.get_position()
             main_plt.set_position([box.x0, box.y0, box.width*0.65, box.height])
@@ -444,7 +437,10 @@ def plot_array_cmd(curves_list, compose_mode = None, **kwargs):
         if kwargs.get('preview'):
             plt.show()
         else:
-            plt.savefig("%s.png" % os.path.splitext(kwargs.get('meta_map')[0][0])[0], bbox_inches='tight')
+            if kwargs.get('filename'):
+                plt.savefig("%s.png" % kwargs.get('filename'), bbox_inches='tight')
+            else:
+                plt.savefig("%s.png" % str.split(curves_list[0].table.file_name, '.')[-2], bbox_inches='tight')
 
     elif compose_mode == 'alone':
         for curve in curves_list:
@@ -461,98 +457,6 @@ def plot_array_cmd(curves_list, compose_mode = None, **kwargs):
         logger.error("Incorrect compose_mode.")
 
 
-
-# Main processing flow
-
-# tables_list = []    # List all table objects
-# result_list = []    # List of processed results
-# meta_list = []    # Metadata of processed results: [(table_name, batch_num, subbatch_num),]
-# strength_list = []
-# slope_list = []
-
-# def cache(table_file, select_str = ''):
-
-#     '''
-#         Cache tables by table file and optional select string
-#     '''
-
-
-#     if select_str != '':
-#         select_split = str.split(select_str, ',')
-#         for elem in select_split:
-#             batch = int(str.split(elem, '-')[0])
-#             subbatch = int(str.split(elem, '-')[1])
-#             if len(str.split(elem, '-')) == 3:
-#                 result = truncate_at(table_file.get(batch, subbatch), int(str.split(elem, '-')[2]))
-#             else:
-#                 try:
-#                     result = table_file.get(batch, subbatch)
-#                 except IndexError:
-#                     logger.warn("Batch %d subbatch %d not found. Skipping." % (batch, subbatch))
-#                     continue
-                
-#             meta_list.append((table_file.tablename, batch, subbatch))
-#             result_list.append(result)
-#             strength_list.append(max_stress(result))
-#     else:
-#         for i in range (0, table_file.batch_count):
-#             for j in range(0, table_file.subbatch_count):
-#                 try:
-#                     result = table_file.get(i+1, j+1)
-#                 except IndexError:
-#                     logger.warn("Batch %d subbatch %d not found. Skipping." % (i, j))
-#                     continue
-#                 result_list.append(result)
-#                 strength_list.append(max_stress(result))
-#                 meta_list.append((table_file.tablename, i+1, j+1))
-                
-# def analysis(slope_range = None):
-
-#     '''
-#         Analyze critical properties of curves
-#     '''
-
-#     for elem in result_list:
-#         if slope_range != None:
-#             slope_range = (int(str.split(args.slope_range, ',')[0]), int(str.split(args.slope_range, ',')[1]))
-#             slope_list.append(linear_regression(elem, from_to=slope_range)[0])
-#         else:
-#             slope_list.append(linear_regression(elem)[0])
-
-#     strength_array = np.array(strength_list)
-
-#     analysis_result = { # Dictionary object of analysis result
-
-#         'ym':{  
-
-#             # Young's Modulus
-
-#             'value': np.average(slope_list),
-#             'std': np.std(slope_list)
-#         },
-#         'uts':{
-
-#             # Ultimate tensile strength
-
-#             'value': np.average(strength_array[:, 0]),
-#             'std': np.std(strength_array[:, 0])
-#         },
-#         'sams':{
-
-#             # Strain at maximum stress
-
-#             'value': np.average(strength_array[:, 1]),
-#             'std': np.std(strength_array[:, 1])
-
-#         }
-#     }
-#     logger.debug(analysis_result.keys())
-#     logger.info("Young's modulus for selected samples: %f, standard deviation: %f" % (analysis_result['ym']['value'], analysis_result['ym']['std']))
-    
-#     logger.info("UTS for selected samples: %f, standard deviation: %f" % (analysis_result["uts"]["value"], analysis_result["uts"]["std"]))
-#     logger.info("Strain at maximum stress for selected samples: %f, standard deviation: %f" % (analysis_result["sams"]["value"], analysis_result["sams"]["std"]))
-
-#     return analysis_result
 
 # Command line mode main processing flow
 if __name__ == "__main__":
@@ -587,6 +491,10 @@ if __name__ == "__main__":
 
     # Initialize curve cache
     cache = Curve_cache(name="main_cmd_cache")
+
+    # Set up plotting config
+    font = config['font']
+    plt.rc('font', **font)
 
     if args.interactive != True and args.file:
 
@@ -627,7 +535,6 @@ if __name__ == "__main__":
                             cache.cache(working_table)
                             print("Data of all samples has been successfully cached.")
                         else:                   
-                            print(select_str)
                             cache.cache_s(working_table, select_str)
                             print("Selection has been successfully cached.")
                     elif filename == '':
