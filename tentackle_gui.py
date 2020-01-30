@@ -27,7 +27,6 @@ class CanvasPanel(wx.Panel):
         self.figure = Figure()
         self.ax = self.figure.add_axes([0.1, 0.15, 0.8, 0.8])
         self.ax.axis(xmin=0, ymin=0)
-        # self.ax.set_title(ylabel = 'Stress [%s]' % config.get('axis').get('y_unit'), xlabel = 'Strain [%s]' % config.get('axis').get('x_unit'))
         self.canvas = FigureCanvasWxAgg(self, wx.ID_ANY, self.figure)
 
 
@@ -42,14 +41,27 @@ class CanvasPanel(wx.Panel):
     # def OnSlider(self, event):
     #     self.draw()
 
-    def draw(self, curves_list):
+    def draw(self, curves_list, selection = None):
+
+        '''
+            curves_list: Dictionary {int index: Curve() curve}
+            selection: List of curve indices
+        ''' 
         
         self.ax.clear()
-        self.ax.set_xlabel("2013", fontsize=12)
+        self.ax.set_xlabel('Strain [%s]' % config.get('axis').get('x_unit'), fontsize=12)
+        self.ax.set_ylabel('Stress [%s]' % config.get('axis').get('y_unit'), fontsize=12)
         self.ax.set_title = ("Strain")
-        for curve in curves_list:
-            array = curve.get_data()
-            self.ax.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
+        if selection == None:
+            for index, curve in curves_list.items():
+                array = curve.get_data()
+                self.ax.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
+        else:
+            for index in selection:
+                curve = curves_list[index]
+                array = curve.get_data()
+                self.ax.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
+
         self.canvas.draw()
         self.Layout()
 
@@ -57,6 +69,8 @@ class CanvasPanel(wx.Panel):
 class Import_dialog(wx.Dialog):
 
     def __init__(self, *args, **kw):
+
+        
 
         super(Import_dialog, self).__init__(*args, **kw)
 
@@ -96,8 +110,9 @@ class Import_dialog(wx.Dialog):
         self.top_h_sizer.Add(self.right_v_sizer, flag = wx.EXPAND|wx.ALL, border = 10)
      
 
-        self.button = wx.Button(self, label = 'OK', size=(70, 30))
-        self.bottom_h_sizer.Add(self.button, proportion = 1, flag = wx.ALIGN_RIGHT)
+        self.ok_button = wx.Button(self, label = 'OK', size=(70, 30))
+        self.ok_button.Bind(wx.EVT_BUTTON, self.on_ok_clicked)
+        self.bottom_h_sizer.Add(self.ok_button, proportion = 1, flag = wx.ALIGN_RIGHT)
 
 
         self.main_sizer.Add(self.top_h_sizer)
@@ -128,25 +143,31 @@ class Import_dialog(wx.Dialog):
         #     self.table = Table(file_path)
         #     self.cache.cache(self.table)
 
+        # Cleanups 
+        self.cache.clear()
+        self.list.DeleteAllItems()
+
         self.table = Table('./test.csv')
         self.cache.cache(self.table)
 
         self.canvas_panel.draw(self.cache.cached)
 
-        index = 0
-        for curve in self.cache.cached:
-            self.list.InsertItem(index, str(index))
-            self.list.SetItem(index, 1, str(curve.table))
-            self.list.SetItem(index, 2, str(curve.batch))
-            self.list.SetItem(index, 3, str(curve.subbatch))
-            index = index + 1
+        list_postion = 0  # A counter for setting list index
+        for curve_index, curve in self.cache.cached.items():
+            self.list.InsertItem(list_postion, str(curve_index))
+            self.list.SetItem(list_postion, 1, str(curve.table))
+            self.list.SetItem(list_postion, 2, str(curve.batch))
+            self.list.SetItem(list_postion, 3, str(curve.subbatch))
+            self.list.SetItemData(list_postion, curve_index)
+            list_postion = list_postion + 1
+        
 
     def on_redraw_clicked(self, event):
 
-        print("on select")
-
+        print("Redraw called")
         selection = self.get_selected()
-        print(selection)
+        index_list = self.translate_index(selection)
+        self.canvas_panel.draw(self.cache.cached, selection = index_list)
 
     def get_selected(self):
 
@@ -157,11 +178,25 @@ class Import_dialog(wx.Dialog):
             next_selection = self.list.GetNextSelected(count)
             if next_selection == -1:
                 return selected
-            print("next")
-            print(next_selection)
             selected.append(next_selection)  
             count = next_selection
 
+    def translate_index(self, position_list):
+
+        '''
+            Convert position list to curve index list
+        '''
+
+        index_list = []
+        for position in position_list:
+            index_list.append(self.list.GetItemData(position))
+
+        return index_list
+
+    def on_ok_clicked(self, event):
+        self.EndModal(0)
+        
+    
 
 class Main_window(wx.Frame):
 
@@ -240,14 +275,14 @@ class Main_window(wx.Frame):
 
     def on_import(self, e):
 
-        # file_dialog = wx.FileDialog(self, "Open .csv", "", "", "Shimadzu raw data file (*.csv)|*.csv", wx.FD_OPEN | wx.FD_FILE_MUST_EXIST)
-        # file_dialog.ShowModal()
-        # file_path = file_dialog.GetPath()
-        # file_dialog.Destroy()
+        file_dialog = wx.FileDialog(self, "Open .csv", "", "", "Shimadzu raw data file (*.csv)|*.csv", wx.FD_OPEN | wx.FD_FILE_MUST_EXIST)
+        file_dialog.ShowModal()
+        file_path = file_dialog.GetPath()
+        file_dialog.Destroy()
 
-        self.import_dialog.set_file_path('file_path')
+        self.import_dialog.set_file_path(file_path)
         self.import_dialog.ShowModal()
-        self.import_dialog.Destroy()
+        # self.import_dialog.Destroy()
 
 
         

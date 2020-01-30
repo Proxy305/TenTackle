@@ -345,7 +345,7 @@ class Curve_cache():
             Delete all curves in cache
         '''
 
-        self._cache = []
+        self._cache = {}
 
     def analyze(self):
         strength_pool = []
