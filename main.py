@@ -254,6 +254,10 @@ class Curve():
     def max_stress(self):
         return max_stress(self.get_data())
 
+    @property
+    def table_name(self):
+        return str(self.table)
+
 class Curve_cache():
 
     '''
@@ -263,7 +267,8 @@ class Curve_cache():
     def __init__(self, name = None):
         super().__init__()
 
-        self._cache = []    # Selection records, format: [(table, (batch, subbatch, truncation))]
+        self._index = 0     # A counter for generating unique index
+        self._cache = {}    # Selection records, format: [(table, (batch, subbatch, truncation))]
         self.name = name
         # self._strength_pool = [] # A pool containing strength of every curve
         # self._slope_pool = []    # A pool containing slope of every curve
@@ -293,9 +298,10 @@ class Curve_cache():
                 # Validate each selection, make sure data for a given batch/subbatch combination exists
                 if table.get_curve_data(selection[0], selection[1], dry_run = True) == True:
                     if len(selection) == 3: # If selection contains truncation point data
-                        self._cache.append(Curve(table, selection[0], selection[1], selection[2]))  # Set truncation if truncation data exists
+                        self._cache[self._index] = Curve(table, selection[0], selection[1], selection[2])  # Set truncation if truncation data exists
                     else:
-                        self._cache.append(Curve(table, selection[0], selection[1]))
+                        self._cache[self._index] = Curve(table, selection[0], selection[1])
+                    self._index += 1    # Set index counter
 
         # If no selection has been specified, then cache everything in the table
         else:
@@ -303,7 +309,8 @@ class Curve_cache():
             for batch in range (1, table.batch_count+1):
                 for subbatch in range(1, table.subbatch_count+1):
                     if table.get_curve_data(batch, subbatch, dry_run = True) == True:
-                        self._cache.append(Curve(table, batch, subbatch))
+                        self._cache[self._index] = Curve(table, batch, subbatch)
+                        self._index += 1    # Set index counter
             
 
     def cache_s(self, table, selection_str = ''):
@@ -345,12 +352,12 @@ class Curve_cache():
         slope_pool = []
 
         # Make sure that there's something in the
-        if self._cache == []:
+        if self._cache == {}:
             logger.error('No selection in curve cache "%s"' % self.name)
             return 0
 
 
-        for curve in self._cache:
+        for index, curve in self._cache.items():
             strength_pool.append(curve.max_stress)
             slope_pool.append(curve.slope)
 
@@ -399,7 +406,7 @@ def plot_array_cmd(curves_list, compose_mode = None, **kwargs):
     Function for plotting arrays to file.
 
     Arguments:
-    - array_list: list, list carrying all sample info
+    - curves_list: Dictionary {int index, Curve() curve}, usually from Curve_cache.cached
     - compose_mode: string, to plot the arrays in what manner
         - 'combined': plot all array in one plot
         - 'alone': plot each array in a single plot
@@ -417,7 +424,7 @@ def plot_array_cmd(curves_list, compose_mode = None, **kwargs):
         legend_list = []
 
         # Plot arrays in curves_list
-        for curve in curves_list:
+        for index, curve in curves_list.items():
             array = curve.get_data()
             legend_list.append(str(curve))
             main_plt.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
@@ -443,7 +450,7 @@ def plot_array_cmd(curves_list, compose_mode = None, **kwargs):
                 plt.savefig("%s.png" % str.split(curves_list[0].table.file_name, '.')[-2], bbox_inches='tight')
 
     elif compose_mode == 'alone':
-        for curve in curves_list:
+        for index, curve in curves_list.items():
             array = curve.get_data()
             plt.figure(i)
             plt.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
