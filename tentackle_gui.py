@@ -207,6 +207,53 @@ class Main_window(wx.Frame):
 
         self.init_ui()
 
+        self.main_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.left_v_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.right_v_sizer = wx.BoxSizer(wx.VERTICAL)
+
+
+        self.left_v_sizer.Add(wx.StaticText(self, label = 'Preview'), flag = wx.EXPAND)
+        self.left_v_sizer.Add((0,10))
+        canvas_limiter = wx.Panel(self, size = (800, 600))
+        self.canvas = CanvasPanel(canvas_limiter)
+        self.canvas.SetSize(wx.Size(800, 600))
+        self.left_v_sizer.Add(canvas_limiter, flag = wx.EXPAND)
+        self.left_v_sizer.Add((0,10))
+        slider_sizer_w = wx.BoxSizer(wx.HORIZONTAL)
+        slider_sizer_w.Add(wx.StaticText(self, label = 'Width', size=(50,-1)), proportion = 0, flag = wx.EXPAND|wx.ALIGN_CENTER)
+        width_slider = wx.Slider(self, name = 'width_slider', value=100)
+        slider_sizer_w.Add(width_slider, proportion = 1, flag = wx.EXPAND)
+        self.w_indicator = wx.StaticText(self, label = '100%', size=(50,-1))
+        slider_sizer_w.Add(self. w_indicator, proportion = 0, flag = wx.EXPAND)
+        self.left_v_sizer.Add(slider_sizer_w, flag = wx.EXPAND)
+        self.left_v_sizer.Add((0,10))
+        slider_sizer_h = wx.BoxSizer(wx.HORIZONTAL)
+        slider_sizer_h.Add(wx.StaticText(self, label = 'Height', size=(50,-1)), proportion = 0, flag = wx.EXPAND|wx.ALIGN_CENTER)
+        height_slider = wx.Slider(self, name = 'height_slider', value=100)
+        slider_sizer_h.Add(height_slider, proportion = 1, flag = wx.EXPAND)
+        self.h_indicator = wx.StaticText(self, label = '100%', size=(50,-1))
+        slider_sizer_h.Add(self. h_indicator, proportion = 0, flag = wx.EXPAND)
+        self.left_v_sizer.Add(slider_sizer_h, flag = wx.EXPAND)
+        
+
+        
+        self.right_v_sizer.Add(wx.StaticText(self, label = 'Selection'), flag = wx.EXPAND)
+        self.right_v_sizer.Add((0,10))
+        self.list = wx.ListCtrl(self, wx.ID_ANY, style = wx.LC_REPORT)
+        self.list.InsertColumn(0, "Index")
+        self.list.InsertColumn(1, "Sample")
+        self.list.InsertColumn(2, "Batch")
+        self.list.InsertColumn(3, "Subbatch")
+        self.list.InsertColumn(5, "Truncation%")
+        self.right_v_sizer.Add(self.list, proportion = 1, flag = wx.EXPAND)
+
+        self.main_sizer.Add(self.left_v_sizer, flag = wx.EXPAND|wx.ALL, border = 10)
+        self.main_sizer.Add(self.right_v_sizer, flag = wx.EXPAND|wx.ALL, border = 10)
+        self.SetSizer(self.main_sizer)
+
+        self.Fit()
+        self.Centre()
+
     def init_ui(self):
 
         # Menu bar
@@ -268,7 +315,7 @@ class Main_window(wx.Frame):
         # Set main window
 
         self.SetTitle('TenTackle GUI')
-        self.Centre()
+        
         
     def on_quit(self, e):
         self.Close()
