@@ -267,8 +267,9 @@ class Curve_cache():
     def __init__(self, name = None):
         super().__init__()
 
-        self._index = 0     # A counter for generating unique index
+        self._curve_index = 0     # A counter for generating unique index for curves
         self._cache = {}    # Selection records, format: [(table, (batch, subbatch, truncation))]
+        self._cache_record = {}     # A record for each cache action
         self.name = name
         # self._strength_pool = [] # A pool containing strength of every curve
         # self._slope_pool = []    # A pool containing slope of every curve
@@ -292,16 +293,19 @@ class Curve_cache():
             * selection: a tuple containing batch (required), subbatch (required), truncation point (optional)
         '''
 
+        cached_indices = []     # List of indices of cached curves
+
         # If selection exists, then cache the selections:
         if selections != None:
             for selection in selections:
                 # Validate each selection, make sure data for a given batch/subbatch combination exists
                 if table.get_curve_data(selection[0], selection[1], dry_run = True) == True:
                     if len(selection) == 3: # If selection contains truncation point data
-                        self._cache[self._index] = Curve(table, selection[0], selection[1], selection[2])  # Set truncation if truncation data exists
+                        self._cache[self._curve_index] = Curve(table, selection[0], selection[1], selection[2])  # Set truncation if truncation data exists
                     else:
-                        self._cache[self._index] = Curve(table, selection[0], selection[1])
-                    self._index += 1    # Set index counter
+                        self._cache[self._curve_index] = Curve(table, selection[0], selection[1])
+                    cached_indices.append(self._curve_index)    # Write to list of index of selection
+                    self._curve_index += 1    # Set index counter
 
         # If no selection has been specified, then cache everything in the table
         else:
@@ -309,8 +313,14 @@ class Curve_cache():
             for batch in range (1, table.batch_count+1):
                 for subbatch in range(1, table.subbatch_count+1):
                     if table.get_curve_data(batch, subbatch, dry_run = True) == True:
-                        self._cache[self._index] = Curve(table, batch, subbatch)
-                        self._index += 1    # Set index counter
+                        self._cache[self._curve_index] = Curve(table, batch, subbatch)
+                        cached_indices.append(self._curve_index)
+                        self._curve_index += 1    # Set index counter
+
+
+        # Write import record
+
+        self._cache_record[table.file_name] = cached_indices
             
 
     def cache_s(self, table, selection_str = ''):
@@ -338,6 +348,43 @@ class Curve_cache():
                     selections.append((batch, subbatch))
 
         self.cache(table, selections)
+
+    def remove(self, index):
+
+        '''
+            Remove one curve in cache, by its index
+        '''
+
+        self._cache.pop(index, None)
+
+
+    def remove_by_indices(self, indices):
+
+        '''
+            Remove multiple curves specified by a list of indices in cache. A wrapper for Curve_cache.remove()
+
+            indices: a list of index
+        '''
+
+        for index in indices:
+
+            self.remove(index)
+
+    def revert(self, file_name):
+
+        '''
+            Revert a certain cache action specified by file name
+        '''
+
+        cached_indices = self._cache_record.get(file_name)
+        
+        if cached_indices  != None:
+            self.remove_by_indices(cached_indices)     
+            self._cache_record.pop(file_name)
+
+        
+
+
 
     def clear(self):
         

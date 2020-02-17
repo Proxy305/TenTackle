@@ -194,8 +194,9 @@ class Import_dialog(wx.Dialog):
         return index_list
 
     def on_ok_clicked(self, event):
+
         self.EndModal(0)
-        
+
     
 
 class Main_window(wx.Frame):
@@ -221,16 +222,18 @@ class Main_window(wx.Frame):
         self.left_v_sizer.Add((0,10))
         slider_sizer_w = wx.BoxSizer(wx.HORIZONTAL)
         slider_sizer_w.Add(wx.StaticText(self, label = 'Width', size=(50,-1)), proportion = 0, flag = wx.EXPAND|wx.ALIGN_CENTER)
-        width_slider = wx.Slider(self, name = 'width_slider', value=100)
-        slider_sizer_w.Add(width_slider, proportion = 1, flag = wx.EXPAND)
+        self.width_slider = wx.Slider(self, name = 'width_slider', value=100)
+        self.width_slider.Bind(wx.EVT_SLIDER, self.on_slider)
+        slider_sizer_w.Add(self.width_slider, proportion = 1, flag = wx.EXPAND)
         self.w_indicator = wx.StaticText(self, label = '100%', size=(50,-1))
         slider_sizer_w.Add(self. w_indicator, proportion = 0, flag = wx.EXPAND)
         self.left_v_sizer.Add(slider_sizer_w, flag = wx.EXPAND)
         self.left_v_sizer.Add((0,10))
         slider_sizer_h = wx.BoxSizer(wx.HORIZONTAL)
         slider_sizer_h.Add(wx.StaticText(self, label = 'Height', size=(50,-1)), proportion = 0, flag = wx.EXPAND|wx.ALIGN_CENTER)
-        height_slider = wx.Slider(self, name = 'height_slider', value=100)
-        slider_sizer_h.Add(height_slider, proportion = 1, flag = wx.EXPAND)
+        self.height_slider = wx.Slider(self, name = 'height_slider', value=100)
+        self.height_slider.Bind(wx.EVT_SLIDER, self.on_slider)
+        slider_sizer_h.Add(self.height_slider, proportion = 1, flag = wx.EXPAND)
         self.h_indicator = wx.StaticText(self, label = '100%', size=(50,-1))
         slider_sizer_h.Add(self. h_indicator, proportion = 0, flag = wx.EXPAND)
         self.left_v_sizer.Add(slider_sizer_h, flag = wx.EXPAND)
@@ -328,8 +331,24 @@ class Main_window(wx.Frame):
         file_dialog.Destroy()
 
         self.import_dialog.set_file_path(file_path)
-        self.import_dialog.ShowModal()
+        status = self.import_dialog.ShowModal()
+        
         # self.import_dialog.Destroy()
+
+        if status == 0:
+            pass
+    
+    def on_slider(self, event):
+        height_value = self.height_slider.GetValue()
+        width_value = self.width_slider.GetValue()
+
+        height = height_value * 6
+        width = width_value * 8
+
+        self.canvas.SetSize(wx.Size(width, height))
+
+        self.w_indicator.SetLabel(str(width_value) + '%')
+        self.h_indicator.SetLabel(str(height_value) + '%')
 
 
         
