@@ -121,7 +121,7 @@ class Table:
         super().__init__()
         
         self.tables = []    # Keeps all table raw infomation
-        self.file_name = filename
+        self._file_name = filename
 
         # Split multiple tables in single .csv file
         with open(filename, newline='', encoding='Shift-JIS') as f:
@@ -155,8 +155,12 @@ class Table:
         self.truncation_records = [[0 for i in range(self.batch_count)] for j in range(self.subbatch_count)]
 
     @property
-    def table_name():
+    def table_name(self):
         return self._table_name
+
+    @property
+    def file_name(self):
+        return self._file_name
 
     def dimensions(self, batch, subbatch):
 
@@ -291,6 +295,8 @@ class Curve_cache():
             table: a Table() object
             selections: list of selction
             * selection: a tuple containing batch (required), subbatch (required), truncation point (optional)
+
+            Notice: If a table has been cached before, then when it is cached again, the previous caching action gets reverted. All table objects pointing to a same data file will be deemed as the same object.
         '''
 
         cached_indices = []     # List of indices of cached curves
@@ -318,9 +324,16 @@ class Curve_cache():
                         self._curve_index += 1    # Set index counter
 
 
+        # Validate if this table has been cached before
+        if self._cache_record.get(table.file_name) != None:
+            # If this table has been cached before, revert the cache action
+            self.remove_by_indices(self._cache_record[table.file_name])
         # Write import record
-
         self._cache_record[table.file_name] = cached_indices
+
+
+        # Return indices of cached curves
+        return cached_indices
             
 
     def cache_s(self, table, selection_str = ''):

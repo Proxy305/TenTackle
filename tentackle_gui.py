@@ -3,6 +3,7 @@
 
 import os, sys
 import wx
+import wx.lib.newevent
 import numpy as np
 import matplotlib
 import ObjectListView
@@ -16,6 +17,25 @@ from matplotlib.backends.backend_wx import NavigationToolbar2Wx
 from matplotlib.figure import Figure
 
 
+class History_manager():
+
+    def __init__(self):
+
+        self._stack = {}
+        self._index = 0
+
+    def append(self, selection):
+        
+        self._stack[self._index] = selection
+        self._index += 1
+        return self._index
+
+    def revert(self, index):
+
+        self._stack.pop(index)
+    
+    
+
 class CanvasPanel(wx.Panel):
     def __init__(self, *args, **kw):
 
@@ -26,6 +46,7 @@ class CanvasPanel(wx.Panel):
 
         self.figure = Figure()
         self.ax = self.figure.add_axes([0.1, 0.15, 0.8, 0.8])
+        # self.ax = self.figure.add_axes([0, 0 ,1 ,1])
         self.ax.axis(xmin=0, ymin=0)
         self.canvas = FigureCanvasWxAgg(self, wx.ID_ANY, self.figure)
 
@@ -37,6 +58,13 @@ class CanvasPanel(wx.Panel):
         self.SetSizer(self.sizer)
         self.Fit()
         
+        
+        self.ax.set_xlabel('Strain [%s]' % config.get('axis').get('x_unit'), fontsize=12)
+        self.ax.set_ylabel('Stress [%s]' % config.get('axis').get('y_unit'), fontsize=12)
+        self.ax.set_title = ("Strain")
+
+        box = self.ax.get_position()
+        self.ax.set_position([box.x0, box.y0, box.width*0.65, box.height])
 
     # def OnSlider(self, event):
     #     self.draw()
@@ -49,18 +77,23 @@ class CanvasPanel(wx.Panel):
         ''' 
         
         self.ax.clear()
-        self.ax.set_xlabel('Strain [%s]' % config.get('axis').get('x_unit'), fontsize=12)
-        self.ax.set_ylabel('Stress [%s]' % config.get('axis').get('y_unit'), fontsize=12)
-        self.ax.set_title = ("Strain")
+
+        legend_list = []
         if selection == None:
             for index, curve in curves_list.items():
                 array = curve.get_data()
+                legend_list.append(str(curve))
                 self.ax.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
         else:
             for index in selection:
                 curve = curves_list[index]
                 array = curve.get_data()
+                legend_list.append(str(curve))
                 self.ax.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
+
+        
+        
+        self.ax.legend(legend_list, bbox_to_anchor=(1.05,1), borderaxespad=0.)
 
         self.canvas.draw()
         self.Layout()
@@ -70,13 +103,12 @@ class Import_dialog(wx.Dialog):
 
     def __init__(self, *args, **kw):
 
-        
+        self.cache = kw.pop('cache')
 
         super(Import_dialog, self).__init__(*args, **kw)
 
         self.SetTitle('Import')
 
-        self.cache = Curve_cache()
         self.table = None
         self.file_path = None
         
@@ -138,28 +170,32 @@ class Import_dialog(wx.Dialog):
 
     def set_file_path(self, file_path):
         
-        # self.file_path = file_path
-        # if os.path.isfile(file_path):
-        #     self.table = Table(file_path)
-        #     self.cache.cache(self.table)
+        self.file_path = file_path
+        if os.path.isfile(file_path):
+            self.table = Table(file_path)
+            indices = self.cache.cache(self.table)
 
         # Cleanups 
-        self.cache.clear()
+        # self.cache.clear()
         self.list.DeleteAllItems()
 
-        self.table = Table('./test.csv')
-        self.cache.cache(self.table)
+        
 
-        self.canvas_panel.draw(self.cache.cached)
+        # Construct curve list for this single cache action
+        curve_list = {}
+        for index in indices:
+            curve_list[index] = self.cache.cached[index]
 
-        list_postion = 0  # A counter for setting list index
-        for curve_index, curve in self.cache.cached.items():
-            self.list.InsertItem(list_postion, str(curve_index))
-            self.list.SetItem(list_postion, 1, str(curve.table))
-            self.list.SetItem(list_postion, 2, str(curve.batch))
-            self.list.SetItem(list_postion, 3, str(curve.subbatch))
-            self.list.SetItemData(list_postion, curve_index)
-            list_postion = list_postion + 1
+        self.canvas_panel.draw(curve_list)
+
+        list_position = 0  # A counter for setting list index
+        for curve_index, curve in curve_list.items():
+            self.list.InsertItem(list_position, str(curve_index))
+            self.list.SetItem(list_position, 1, str(curve.table))
+            self.list.SetItem(list_position, 2, str(curve.batch))
+            self.list.SetItem(list_position, 3, str(curve.subbatch))
+            self.list.SetItemData(list_position, curve_index)
+            list_position = list_position + 1
         
 
     def on_redraw_clicked(self, event):
@@ -195,16 +231,39 @@ class Import_dialog(wx.Dialog):
 
     def on_ok_clicked(self, event):
 
+        '''
+            On OK button clicked, revert the previous caching action, then cache the selected curves
+        '''
+
+        # Construct selection for Curve_cache.cache() for next caching action
+        selected = self.translate_index(self.get_selected())    # List of selected curves
+        selections = []  # Selection for Curve_cache.cache()
+        for index in selected:  # 
+            curve = self.cache.cached[index]
+            selections.append((curve.batch, curve.subbatch))
+
+        # Revert the previous action (made by self.set_file_path())
+        self.cache.revert(self.table.file_name)
+
+        # Cache selected curves
+        self.cache.cache(self.table, selections = selections)
+
         self.EndModal(0)
+        
 
     
 
 class Main_window(wx.Frame):
 
     def __init__(self, *args, **kwargs):
+
+        self.cache = kwargs.pop('cache')
+
         super(Main_window, self).__init__(*args, **kwargs)
 
-        self.import_dialog = Import_dialog(self, style = wx.DEFAULT_DIALOG_STYLE|wx.RESIZE_BORDER)
+        # self.history = History_manager()
+
+        self.import_dialog = Import_dialog(self, style = wx.DEFAULT_DIALOG_STYLE|wx.RESIZE_BORDER, cache = self.cache)
 
         self.init_ui()
 
@@ -247,7 +306,7 @@ class Main_window(wx.Frame):
         self.list.InsertColumn(1, "Sample")
         self.list.InsertColumn(2, "Batch")
         self.list.InsertColumn(3, "Subbatch")
-        self.list.InsertColumn(5, "Truncation%")
+        self.list.InsertColumn(4, "Truncation%")
         self.right_v_sizer.Add(self.list, proportion = 1, flag = wx.EXPAND)
 
         self.main_sizer.Add(self.left_v_sizer, flag = wx.EXPAND|wx.ALL, border = 10)
@@ -305,12 +364,12 @@ class Main_window(wx.Frame):
         self.toolbar = self.CreateToolBar()
 
         tb_import = self.toolbar.AddTool(wx.ID_ADD, 'Import', wx.ArtProvider.GetBitmap(wx.ART_PLUS))
-
         self.Bind(wx.EVT_TOOL, self.on_import, tb_import)       
 
         self.toolbar.AddSeparator()
 
         tb_info = self.toolbar.AddTool(wx.ID_INFO, 'Info', wx.ArtProvider.GetBitmap(wx.ART_INFORMATION))
+        self.Bind(wx.EVT_TOOL, self.on_info, tb_info)
 
         self.toolbar.Realize()
 
@@ -332,11 +391,11 @@ class Main_window(wx.Frame):
 
         self.import_dialog.set_file_path(file_path)
         status = self.import_dialog.ShowModal()
-        
+
         # self.import_dialog.Destroy()
 
         if status == 0:
-            pass
+            self.canvas.draw(self.cache.cached)
     
     def on_slider(self, event):
         height_value = self.height_slider.GetValue()
@@ -350,14 +409,38 @@ class Main_window(wx.Frame):
         self.w_indicator.SetLabel(str(width_value) + '%')
         self.h_indicator.SetLabel(str(height_value) + '%')
 
+    def _plot(self, selection):
 
+        # Construct curve list for plotting
+        curve_list = {}
+        for index in selection:
+            curve_list[index] = self.cache.cached[index]
+
+        self.canvas.draw(curve_list)
         
+        # Write curves to list box
+        list_position = 0
+        for curve_index, curve in curve_list.items():
+            self.list.InsertItem(list_position, str(curve_index))
+            self.list.SetItem(list_position, 1, str(curve.table))
+            self.list.SetItem(list_position, 2, str(curve.batch))
+            self.list.SetItem(list_position, 3, str(curve.subbatch))
+            self.list.SetItem(list_position, 4, str(0))
+            self.list.SetItemData(list_position, curve_index)
+            list_position = list_position + 1  
+
+    def on_info(self):
+
+        pass          
+
 
 
 def main():
 
+    main_cache = Curve_cache()
+
     app = wx.App()
-    main_window = Main_window(None)
+    main_window = Main_window(None, cache = main_cache)
     main_window.Show()
     app.MainLoop()
 
