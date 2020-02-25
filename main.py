@@ -411,7 +411,7 @@ class Curve_cache():
         strength_pool = []
         slope_pool = []
 
-        # Make sure that there's something in the
+        # Make sure that there's something in the cache
         if self._cache == {}:
             logger.error('No selection in curve cache "%s"' % self.name)
             return 0
@@ -422,6 +422,9 @@ class Curve_cache():
             slope_pool.append(curve.slope)
 
         strength_array = np.array(strength_pool)
+        slope_array = np.array(slope_pool)
+
+        print(slope_pool)
 
         analysis_result = { # Dictionary object of analysis result
 
@@ -429,8 +432,8 @@ class Curve_cache():
 
                 # Young's Modulus
 
-                'value': np.average(slope_pool),
-                'std': np.std(slope_pool)
+                'value': np.average(slope_array[:, 0]),
+                'std': np.std(slope_array[:, 0])
             },
             'uts':{
 
@@ -648,3 +651,11 @@ if __name__ == "__main__":
                 print("Invalid action.")
     else:
         logger.error("No file specified. Exit.\n Use -h for help.")
+
+else:
+    # Logging settings (when used as a module)
+    logger = logging.getLogger(__name__)
+    logger.setLevel(level=logging.ERROR)
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    logger.addHandler(ch)

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # TenTackle_GUI: Simple GUI for TenTackle
 
-import os, sys
+import os, sys, logging
 import wx
 import wx.lib.newevent
 import numpy as np
@@ -17,24 +17,7 @@ from matplotlib.backends.backend_wx import NavigationToolbar2Wx
 from matplotlib.figure import Figure
 
 
-class History_manager():
 
-    def __init__(self):
-
-        self._stack = {}
-        self._index = 0
-
-    def append(self, selection):
-        
-        self._stack[self._index] = selection
-        self._index += 1
-        return self._index
-
-    def revert(self, index):
-
-        self._stack.pop(index)
-    
-    
 
 class CanvasPanel(wx.Panel):
     def __init__(self, *args, **kw):
@@ -76,7 +59,7 @@ class CanvasPanel(wx.Panel):
             selection: List of curve indices
         ''' 
         
-        self.ax.clear()
+        self.clear()
 
         legend_list = []
         if selection == None:
@@ -98,6 +81,13 @@ class CanvasPanel(wx.Panel):
         self.canvas.draw()
         self.Layout()
 
+    def clear(self):
+
+        '''
+            Erase anything on the figure
+        '''
+
+        self.ax.clear()
 
 class Import_dialog(wx.Dialog):
 
@@ -368,6 +358,10 @@ class Main_window(wx.Frame):
 
         self.toolbar.AddSeparator()
 
+
+        tb_clear = self.toolbar.AddTool(wx.ID_CLEAR, 'Clear', wx.ArtProvider.GetBitmap(wx.ART_DELETE))
+        self.Bind(wx.EVT_TOOL, self.on_clear, tb_clear)   
+
         tb_info = self.toolbar.AddTool(wx.ID_INFO, 'Info', wx.ArtProvider.GetBitmap(wx.ART_INFORMATION))
         self.Bind(wx.EVT_TOOL, self.on_info, tb_info)
 
@@ -395,7 +389,19 @@ class Main_window(wx.Frame):
         # self.import_dialog.Destroy()
 
         if status == 0:
+
             self.canvas.draw(self.cache.cached)
+
+            # Writr curve info to listbox
+            list_position = 0
+            for curve_index, curve in self.cache.cached.items():
+                self.list.InsertItem(list_position, str(curve_index))
+                self.list.SetItem(list_position, 1, str(curve.table))
+                self.list.SetItem(list_position, 2, str(curve.batch))
+                self.list.SetItem(list_position, 3, str(curve.subbatch))
+                self.list.SetItem(list_position, 4, str(0))
+                self.list.SetItemData(list_position, curve_index)
+                list_position = list_position + 1  
     
     def on_slider(self, event):
         height_value = self.height_slider.GetValue()
@@ -408,31 +414,26 @@ class Main_window(wx.Frame):
 
         self.w_indicator.SetLabel(str(width_value) + '%')
         self.h_indicator.SetLabel(str(height_value) + '%')
-
-    def _plot(self, selection):
-
-        # Construct curve list for plotting
-        curve_list = {}
-        for index in selection:
-            curve_list[index] = self.cache.cached[index]
-
-        self.canvas.draw(curve_list)
         
-        # Write curves to list box
-        list_position = 0
-        for curve_index, curve in curve_list.items():
-            self.list.InsertItem(list_position, str(curve_index))
-            self.list.SetItem(list_position, 1, str(curve.table))
-            self.list.SetItem(list_position, 2, str(curve.batch))
-            self.list.SetItem(list_position, 3, str(curve.subbatch))
-            self.list.SetItem(list_position, 4, str(0))
-            self.list.SetItemData(list_position, curve_index)
-            list_position = list_position + 1  
 
-    def on_info(self):
+    def on_info(self, e):
 
-        pass          
+        result_dict = self.cache.analyze()
+        if result_dict != 0:
+            result_str = "YM: %.3f\u00b1%.3f\n UTS: %.3f\u00b1%.3f\n E: %.3f\u00b1%.3f\n" % (result_dict['ym']['value'], result_dict['ym']['std'], result_dict['uts']['value'], result_dict['uts']['std'], result_dict['sams']['value'], result_dict['sams']['std'])
+            wx.MessageBox(result_str, "Analysis results", wx.OK | wx.ICON_EXCLAMATION)
+        else:
+            wx.MessageBox("No curve has been cached!", "Error", wx.OK | wx.ICON_EXCLAMATION)
 
+    def on_clear(self, e):
+
+        reply = wx.MessageBox('Do you really want to clear all curves in cache?', "Warning", wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_EXCLAMATION)
+
+        if reply == wx.OK:
+
+            print("OK")
+            self.cache.clear()
+            self.canvas.clear()
 
 
 def main():
