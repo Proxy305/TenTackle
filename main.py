@@ -273,7 +273,7 @@ class Curve_cache():
 
         self._curve_index = 0     # A counter for generating unique index for curves
         self._cache = {}    # Selection records, format: [(table, (batch, subbatch, truncation))]
-        self._cache_record = {}     # A record for each cache action
+        self._cache_record = {}     # A record for each cache action, structure: {file_name:[index1, index2, ...]}
         self.name = name
         # self._strength_pool = [] # A pool containing strength of every curve
         # self._slope_pool = []    # A pool containing slope of every curve
@@ -459,6 +459,68 @@ class Curve_cache():
 
         return analysis_result        
 
+    def dump(self, file_path = None):
+
+        '''
+            Dump current cache to a .tcs.json ((T)entackle (C)ache (S)napshot file, for editing in the future
+
+            file_path: optional, specifies the save path of the .tcs.json file. If no path selected, the file will be saved to the same path and with the same name as the .csv table file of first curve in cache.
+        '''
+
+        # Figure out where to save the dump file
+
+        path = ''
+
+        if file_path != None:
+            if file_path.endswith('.tcs.json'):
+                path = file_path
+            else:
+                path = file_path + '.tcs.json'
+        else:
+            first_pos = list(self._cache.keys())[0]   # Get index of the 1st element in cache
+            path = os.path.splitext(self._cache[first_pos].table.file_name)[0] + '.tcs.json'
+            logger.debug('No file path specified for dumping. Saving file to default location: %s' % path)
+
+
+        # Construst LUT for curves that has been cached
+        # LUT is like another version of self._cache_record; Hovever, the value of each item is a tuple containing curve info.
+        lut = {}    # Structure of LUT: {filename:[(batch, subbatch, truncation), ...]}
+
+        for file_name, indices in self._cache_record.items():
+            
+            curve_info_list = []
+
+            # Translation from index to info tuple
+            for index in indices:
+                curve = self._cache[index]
+                curve_info_list.append((curve.batch, curve.subbatch, curve.truncate_point))
+
+            lut[file_name] = curve_info_list
+
+        
+        # Save to file
+
+        try:
+            with open(path, 'w') as fp:
+                json.dump(lut, fp)
+            return file_path
+        except Exception as e:
+            logger.debug(e)
+            return 0
+
+            
+
+
+    def restore(self, file_path):
+
+        '''
+            Retore cache from a .tcs.json ((T)entackle (C)ache (S)napshot file
+
+            file_path: specifies the .tcs.json file to retore
+        '''
+
+        if os.path.isfile(file_path) and file_path.endswith('.tcs.json'):
+            pass
         
         
 # Plotting function
@@ -655,7 +717,7 @@ if __name__ == "__main__":
 else:
     # Logging settings (when used as a module)
     logger = logging.getLogger(__name__)
-    logger.setLevel(level=logging.ERROR)
+    logger.setLevel(level=logging.DEBUG)
     ch = logging.StreamHandler()
     ch.setLevel(logging.DEBUG)
     logger.addHandler(ch)

@@ -41,10 +41,6 @@ class CanvasPanel(wx.Panel):
         self.SetSizer(self.sizer)
         self.Fit()
         
-        
-        self.ax.set_xlabel('Strain [%s]' % config.get('axis').get('x_unit'), fontsize=12)
-        self.ax.set_ylabel('Stress [%s]' % config.get('axis').get('y_unit'), fontsize=12)
-        self.ax.set_title = ("Strain")
 
         box = self.ax.get_position()
         self.ax.set_position([box.x0, box.y0, box.width*0.65, box.height])
@@ -60,6 +56,11 @@ class CanvasPanel(wx.Panel):
         ''' 
         
         self.clear()
+
+
+        self.ax.set_xlabel('Strain [%s]' % config.get('axis').get('x_unit'), fontsize=12)
+        self.ax.set_ylabel('Stress [%s]' % config.get('axis').get('y_unit'), fontsize=12)
+        self.ax.set_title = ("Strain")
 
         legend_list = []
         if selection == None:
@@ -318,6 +319,7 @@ class Main_window(wx.Frame):
 
         mb_save = wx.MenuItem(file_menu, wx.ID_ANY, '&Save project...\tCtrl+S')
         file_menu.Append(mb_save)
+        self.Bind(wx.EVT_MENU, self.on_save, mb_save)
 
         mb_save_as = wx.MenuItem(file_menu, wx.ID_ANY, '&Save project as...\tCtrl+Shift+S')
         file_menu.Append(mb_save_as)
@@ -434,6 +436,13 @@ class Main_window(wx.Frame):
             print("OK")
             self.cache.clear()
             self.canvas.clear()
+
+    def on_save(self, e):
+
+        file_path = self.cache.dump()
+        if file_path == 0:
+            wx.MessageBox('Error occured during saving to file.', "Warning", wx.OK | wx.ICON_EXCLAMATION)
+
 
 
 def main():
