@@ -228,9 +228,9 @@ class Curve():
 
         super().__init__()
 
-        self.table = table
-        self.batch = batch
-        self.subbatch = subbatch
+        self._table = table # Read only
+        self._batch = batch # Read only
+        self._subbatch = subbatch   # Read only
         self.truncate_point = truncate_point
 
     def get_data(self, truncate = False):
@@ -248,6 +248,18 @@ class Curve():
 
     def __str__(self):
         return '%s-%d-%d' % (str(self.table), self.batch, self.subbatch)
+
+    @property
+    def table(self):
+        return self._table
+
+    @property
+    def batch(self):
+        return self._batch
+
+    @property
+    def subbatch(self):
+        return self._subbatch            
 
     @property
     def slope(self):
@@ -272,20 +284,29 @@ class Curve_cache():
         super().__init__()
 
         self._curve_index = 0     # A counter for generating unique index for curves
-        self._cache = {}    # Selection records, format: [(table, (batch, subbatch, truncation))]
-        self._cache_record = {}     # A record for each cache action, structure: {file_name:[index1, index2, ...]}
+        self._cache = {}    # Selection records, format: {index: Curve, ...}, WRITE ONLY
+        self._cache_status = {}     # Current status of the cache, a LUT for looking up index and truncation of selected curves of each table file being cached, structure: {file_name: {index1: trunction, index2: truncation, ...}}
+        self._snapshot = [] # Snapshot for self.cache_status(), structure: [cache_status_1, cache_status_2, ...]
+        self._pointer = -1  # A pointer indicating the current position in status snapshot
         self.name = name
-        # self._strength_pool = [] # A pool containing strength of every curve
-        # self._slope_pool = []    # A pool containing slope of every curve
+        
+        self.update_snapshot()  # Set initial status
 
     @property
     def cached(self):
 
         '''
-            Return the current cache
+            Construct a list of curves
         '''
 
-        return self._cache
+        curves_list = {}
+
+        for table_file, info_dict in self._cache_status.items():
+            for index, turncation_point in info_dict.items():
+                var = self._cache[index]
+                curves_list[index] = var
+
+        return curves_list
 
     def cache(self, table, selections = None):
 
@@ -299,18 +320,19 @@ class Curve_cache():
             Notice: If a table has been cached before, then when it is cached again, the previous caching action gets reverted. All table objects pointing to a same data file will be deemed as the same object.
         '''
 
-        cached_indices = []     # List of indices of cached curves
+        cached_info = {}     # List of indices of cached curves of the current operating table file
 
         # If selection exists, then cache the selections:
         if selections != None:
             for selection in selections:
                 # Validate each selection, make sure data for a given batch/subbatch combination exists
                 if table.get_curve_data(selection[0], selection[1], dry_run = True) == True:
+                    truncate_point = -1
                     if len(selection) == 3: # If selection contains truncation point data
                         self._cache[self._curve_index] = Curve(table, selection[0], selection[1], selection[2])  # Set truncation if truncation data exists
                     else:
                         self._cache[self._curve_index] = Curve(table, selection[0], selection[1])
-                    cached_indices.append(self._curve_index)    # Write to list of index of selection
+                    cached_info[self._curve_index] = truncate_point    # Write to list of index of selection
                     self._curve_index += 1    # Set index counter
 
         # If no selection has been specified, then cache everything in the table
@@ -320,19 +342,25 @@ class Curve_cache():
                 for subbatch in range(1, table.subbatch_count+1):
                     if table.get_curve_data(batch, subbatch, dry_run = True) == True:
                         self._cache[self._curve_index] = Curve(table, batch, subbatch)
-                        cached_indices.append(self._curve_index)
+                        cached_info[self._curve_index] = -1 # -1: default runcation point (no truncation)
                         self._curve_index += 1    # Set index counter
 
 
         # Validate if this table has been cached before
-        if self._cache_record.get(table.file_name) != None:
-            # If this table has been cached before, revert the cache action
-            self.remove_by_indices(self._cache_record[table.file_name])
+        # if self._cache_status.get(table.file_name) != None:
+        #     # If this table has been cached before, revert the cache action
+        #     print("fuck python!")
+        #     self.remove_by_indices(self._cache_status[table.file_name])
         # Write import record
-        self._cache_record[table.file_name] = cached_indices
+        self._cache_status[table.file_name] = cached_info
 
+        # Update status snapshot
+        self.update_snapshot()
 
         # Return indices of cached curves
+        cached_indices = []
+        for index, truncation in cached_info.items():
+            cached_indices.append(index)
         return cached_indices
             
 
@@ -362,6 +390,27 @@ class Curve_cache():
 
         self.cache(table, selections)
 
+    def set_truncation(self, index, truncate_at):
+
+        '''
+            Set truncation point for a curve in cache
+
+            index: index of the curve in cache
+            truncate_ at: percentage turncation point
+        '''
+        
+        # Lookup the table file for the curve
+        curve = self._cache[index]
+
+        # Rewrite truncation point information
+        self._cache_status[curve.table_file][index] = truncate_at
+        curve.truncate_point = truncate_at  # Legacy compatibility solution
+
+        # Update snapshot
+        self.update_snapshot()
+
+
+
     def remove(self, index):
 
         '''
@@ -389,35 +438,110 @@ class Curve_cache():
             Revert a certain cache action specified by file name
         '''
 
-        cached_indices = self._cache_record.get(file_name)
+        cached_info = self._cache_status.get(file_name)
         
-        if cached_indices  != None:
-            self.remove_by_indices(cached_indices)     
-            self._cache_record.pop(file_name)
+        if cached_info  != None:
+            # self.remove_by_indices(cached_info)     
+            self._cache_status.pop(file_name)
 
+        self.update_snapshot()
+
+    def update_snapshot(self):
+
+        '''
+            Update snapshot and manage pointer
+        '''
+
+        # Verify if there is anything beyond the current pointer position
+        if len(self._snapshot) > self._pointer + 1:
+            # If yes, then drop everything beyond
+            self._snapshot = self._snapshot[: self._pointer + 1]
+
+        # Move pointer
+        self._pointer += 1
+
+        # Update snapshot
+
+        self._snapshot.append(self._cache_status.copy())
+
+
+    def undo(self, dry_run = False):
+
+        '''
+            Roll back the current cache information to one last version
+
+            dry_run: if True, then only whether the cache information can be rolled back to the designated version will verified, and no real rolling back action will be done.
+
+            Return value: (bool1, bool2)
+            - bool1: Whether the current operation has succeeded
+            - bool2: Whether there is enough version in the snapshot so another undo can be performed
+        '''
+
+        succeeded = False   # Flag: If the current operation has succeeded
+        can_proceed = False # Flag: If another undo can be performed
+
+        # Verify if the status can be reverted to 1 version before
+        if self._pointer - 1 < 0:
+            # If cannot
+            return False
+        else:
+            # Move pointer
+            self._pointer -= 1
+
+            # Rewrite cache status
+            self._cache_status = self._snapshot[self._pointer]
+
+        print("Undo, now pointer at %d" % self._pointer)
+        print(self._cache_status)
+
+
+    def redo(self, dry_run = False):
         
+        '''
+            Roll back the current cache information to one last version
+
+            dry_run: if True, then only whether the cache information can be rolled back to the designated version will verified, and no real rolling back action will be done.
+
+            Return value: (bool1, bool2)
+            - bool1: Whether the current operation has succeeded
+            - bool2: Whether there is enough version in the snapshot so another redo can be performed
+        '''
+        # Verify if the status can be reverted to 1 version before
+        if self._pointer - 1 < 0:
+            # If cannot
+            return False
+        else:
+            # Move pointer
+            self._pointer -= 1
+
+            # Rewrite cache status
+            self._cache_status = self._snapshot[self._pointer]
 
 
 
     def clear(self):
         
         '''
-            Delete all curves in cache
+            Delete all curves in cache status
         '''
 
-        self._cache = {}
+        self._cache_status = {}
+
+        self.update_snapshot()
 
     def analyze(self):
         strength_pool = []
         slope_pool = []
 
+        curve_list = self.cached # Get curves that are current in curve_status
+        
         # Make sure that there's something in the cache
-        if self._cache == {}:
+        if curve_list == {}:
             logger.error('No selection in curve cache "%s"' % self.name)
             return 0
 
 
-        for index, curve in self._cache.items():
+        for index, curve in curve_list.items():
             strength_pool.append(curve.max_stress)
             slope_pool.append(curve.slope)
 
@@ -459,7 +583,7 @@ class Curve_cache():
 
         return analysis_result        
 
-    def dump(self, file_path = None):
+    def take_snapshot(self, file_path = None):
 
         '''
             Dump current cache to a .tcs.json ((T)entackle (C)ache (S)napshot file, for editing in the future
@@ -483,10 +607,10 @@ class Curve_cache():
 
 
         # Construst LUT for curves that has been cached
-        # LUT is like another version of self._cache_record; Hovever, the value of each item is a tuple containing curve info.
+        # LUT is like another version of self._cache_status; Hovever, the value of each item is a tuple containing curve info.
         lut = {}    # Structure of LUT: {filename:[(batch, subbatch, truncation), ...]}
 
-        for file_name, indices in self._cache_record.items():
+        for file_name, indices in self._cache_status.items():
             
             curve_info_list = []
 
@@ -511,7 +635,7 @@ class Curve_cache():
             
 
 
-    def restore(self, file_path):
+    def restore_from_snapshot(self, file_path):
 
         '''
             Retore cache from a .tcs.json ((T)entackle (C)ache (S)napshot file

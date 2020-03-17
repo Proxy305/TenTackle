@@ -6,7 +6,7 @@ import wx
 import wx.lib.newevent
 import numpy as np
 import matplotlib
-import ObjectListView
+# import ObjectListViewgit 
 
 from main import Table, Curve, Curve_cache, config
 
@@ -89,6 +89,7 @@ class CanvasPanel(wx.Panel):
         '''
 
         self.ax.clear()
+        self.canvas.draw()
 
 class Import_dialog(wx.Dialog):
 
@@ -360,6 +361,14 @@ class Main_window(wx.Frame):
 
         self.toolbar.AddSeparator()
 
+        tb_undo = self.toolbar.AddTool(wx.ID_UNDO, 'Undo', wx.ArtProvider.GetBitmap(wx.ART_UNDO))
+        self.Bind(wx.EVT_TOOL, self.on_undo, tb_undo)
+
+        tb_redo = self.toolbar.AddTool(wx.ID_REDO, 'Undo', wx.ArtProvider.GetBitmap(wx.ART_REDO))
+        self.Bind(wx.EVT_TOOL, self.on_redo, tb_redo)
+
+        self.toolbar.AddSeparator() 
+
 
         tb_clear = self.toolbar.AddTool(wx.ID_CLEAR, 'Clear', wx.ArtProvider.GetBitmap(wx.ART_DELETE))
         self.Bind(wx.EVT_TOOL, self.on_clear, tb_clear)   
@@ -433,15 +442,24 @@ class Main_window(wx.Frame):
 
         if reply == wx.OK:
 
-            print("OK")
             self.cache.clear()
             self.canvas.clear()
+            self.list.DeleteAllItems()
 
     def on_save(self, e):
 
-        file_path = self.cache.dump()
+        file_path = self.cache.take_snapshot()
         if file_path == 0:
             wx.MessageBox('Error occured during saving to file.', "Warning", wx.OK | wx.ICON_EXCLAMATION)
+
+    def on_undo(self, e):
+        
+        self.cache.undo()
+        self.canvas.draw(self.cache.cached)
+
+    def on_redo(self, e):
+        
+        self.cache.redo()
 
 
 
