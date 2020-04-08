@@ -1,5 +1,7 @@
 # TenTackle
 
+![Preview](https://github.com/Proxy305/TenTackle/blob/gh-pages/synth.png?raw=true)
+
 Tensile data analysis assisting tool for Shimazu.
 
 ## Introduction
@@ -111,8 +113,12 @@ Then follow the instructions on screen.
 
 **Note**: All command line arguments, excluding `-v` will be ignored if parameter `-i` is given.
 
-## Todo
-- Add slope range selection for interactive mode
+## GUI (Experimental)
+
+An experimental GUI is under development.
+
+To use the experimental GUI, checkout `gui` branch and run `tentackle_gui.py`.
+
 
 ## Disclaimer
 
