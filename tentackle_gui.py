@@ -235,7 +235,7 @@ class Import_dialog(wx.Dialog):
             selections.append((curve.batch, curve.subbatch))
 
         # Revert the previous action (made by self.set_file_path())
-        self.cache.revert(self.table.file_name)
+        self.cache.undo()
 
         # Cache selected curves
         self.cache.cache(self.table, selections = selections)
@@ -389,21 +389,24 @@ class Main_window(wx.Frame):
 
     def on_import(self, e):
 
+        # Get the file to be opened
+
         file_dialog = wx.FileDialog(self, "Open .csv", "", "", "Shimadzu raw data file (*.csv)|*.csv", wx.FD_OPEN | wx.FD_FILE_MUST_EXIST)
         file_dialog.ShowModal()
         file_path = file_dialog.GetPath()
         file_dialog.Destroy()
 
+        # Set up the import dialog, and then open the dialog
+        # The import dialog was not destroyed and kepted for next use
+
         self.import_dialog.set_file_path(file_path)
         status = self.import_dialog.ShowModal()
 
-        # self.import_dialog.Destroy()
-
+        # If the import dialog was closed by "OK", which means selection has been done
         if status == 0:
-
             self.canvas.draw(self.cache.cached)
 
-            # Writr curve info to listbox
+            # Write curve info to listbox
             list_position = 0
             for curve_index, curve in self.cache.cached.items():
                 self.list.InsertItem(list_position, str(curve_index))

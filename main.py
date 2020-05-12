@@ -284,7 +284,7 @@ class Curve_cache():
         super().__init__()
 
         self._curve_index = 0     # A counter for generating unique index for curves
-        self._cache = {}    # Selection records, format: {index: Curve, ...}, WRITE ONLY
+        self._cache = {}    # Selection records, format: {index: Curve, ...}
         self._cache_status = {}     # Current status of the cache, a LUT for looking up index and truncation of selected curves of each table file being cached, structure: {file_name: {index1: trunction, index2: truncation, ...}}
         self._snapshot = [] # Snapshot for self.cache_status(), structure: [cache_status_1, cache_status_2, ...]
         self._pointer = -1  # A pointer indicating the current position in status snapshot
@@ -330,6 +330,7 @@ class Curve_cache():
                     truncate_point = -1
                     if len(selection) == 3: # If selection contains truncation point data
                         self._cache[self._curve_index] = Curve(table, selection[0], selection[1], selection[2])  # Set truncation if truncation data exists
+                        truncate_point = selection[2]
                     else:
                         self._cache[self._curve_index] = Curve(table, selection[0], selection[1])
                     cached_info[self._curve_index] = truncate_point    # Write to list of index of selection
@@ -489,10 +490,8 @@ class Curve_cache():
             self._pointer -= 1
 
             # Rewrite cache status
-            self._cache_status = self._snapshot[self._pointer]
+            self._cache_status = self._snapshot[self._pointer].copy()
 
-        print("Undo, now pointer at %d" % self._pointer)
-        print(self._cache_status)
 
 
     def redo(self, dry_run = False):
