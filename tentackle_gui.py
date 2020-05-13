@@ -457,12 +457,13 @@ class Main_window(wx.Frame):
 
     def on_undo(self, e):
         
-        self.cache.undo()
+        result = self.cache.undo()
         self.canvas.draw(self.cache.cached)
 
     def on_redo(self, e):
         
-        self.cache.redo()
+        result = self.cache.redo()
+        self.canvas.draw(self.cache.cached)
 
 
 

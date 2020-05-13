@@ -469,52 +469,76 @@ class Curve_cache():
     def undo(self, dry_run = False):
 
         '''
-            Roll back the current cache information to one last version
+            Roll the current cache information one version back
 
             dry_run: if True, then only whether the cache information can be rolled back to the designated version will verified, and no real rolling back action will be done.
 
             Return value: (bool1, bool2)
-            - bool1: Whether the current operation has succeeded
+            - bool1: Whether the current operation has succeeded. Always true when dry_run is true.
             - bool2: Whether there is enough version in the snapshot so another undo can be performed
         '''
 
-        succeeded = False   # Flag: If the current operation has succeeded
+        succeeded = True   # Flag: If the current operation has succeeded
         can_proceed = False # Flag: If another undo can be performed
 
         # Verify if the status can be reverted to 1 version before
-        if self._pointer - 1 < 0:
-            # If cannot
-            return False
+        if self._pointer > 0:
+            
+            # If not in dry_run mode, do the undo process:
+            if dry_run != True:
+
+                # If something can be undone, move pointer
+                self._pointer -= 1
+
+                # Rewrite cache status
+                self._cache_status = self._snapshot[self._pointer].copy()
+
+            # If the status can be further reverted
+            if self._pointer > 0:
+                can_proceed = True
+        
         else:
-            # Move pointer
-            self._pointer -= 1
+            succeeded = False
 
-            # Rewrite cache status
-            self._cache_status = self._snapshot[self._pointer].copy()
-
+        return succeeded, can_proceed
+        
 
 
     def redo(self, dry_run = False):
         
         '''
-            Roll back the current cache information to one last version
+            Move the current cache information one version Forward
 
-            dry_run: if True, then only whether the cache information can be rolled back to the designated version will verified, and no real rolling back action will be done.
+            dry_run: if True, then only whether the cache information can be restored to the designated version will verified, and no real restoration action will be done.
 
             Return value: (bool1, bool2)
-            - bool1: Whether the current operation has succeeded
-            - bool2: Whether there is enough version in the snapshot so another redo can be performed
+            - bool1: Whether the current operation has succeeded. Always true when dry_run is true.
+            - bool2: Whether there is enough version in the snapshot so another undo can be performed
         '''
-        # Verify if the status can be reverted to 1 version before
-        if self._pointer - 1 < 0:
-            # If cannot
-            return False
-        else:
-            # Move pointer
-            self._pointer -= 1
 
-            # Rewrite cache status
-            self._cache_status = self._snapshot[self._pointer]
+        succeeded = True   # Flag: If the current operation has succeeded
+        can_proceed = False # Flag: If another undo can be performed
+
+        # Verify if the status can be moved to 1 version after
+        if len(self._snapshot) - self._pointer > 1:
+            
+            # If not in dry_run mode, do the redo process:
+            if dry_run != True:
+
+                # If something can be redone, move pointer
+                self._pointer += 1
+
+                # Rewrite cache status
+                self._cache_status = self._snapshot[self._pointer].copy()
+
+            # If the status can be further moved
+            if len(self._snapshot) - self._pointer > 1:
+                can_proceed = True
+        
+        else:
+            succeeded = False
+
+        return succeeded, can_proceed
 
 
 
