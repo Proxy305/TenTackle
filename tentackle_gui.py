@@ -77,7 +77,9 @@ class CanvasPanel(wx.Panel):
 
         
         
-        self.ax.legend(legend_list, bbox_to_anchor=(1.05,1), borderaxespad=0.)
+        # self.ax.legend(legend_list, bbox_to_anchor=(1.05,1), borderaxespad=0.)
+        # Quick hack for auto placing the legend, but should be fixed in the future.
+        self.ax.legend(legend_list)
 
         self.canvas.draw()
         self.Layout()
@@ -382,6 +384,20 @@ class Main_window(wx.Frame):
         # Set main window
 
         self.SetTitle('TenTackle GUI')
+
+    def update_listbox(self):
+
+        self.list.DeleteAllItems()
+
+        list_position = 0
+        for curve_index, curve in self.cache.cached.items():
+            self.list.InsertItem(list_position, str(curve_index))
+            self.list.SetItem(list_position, 1, str(curve.table))
+            self.list.SetItem(list_position, 2, str(curve.batch))
+            self.list.SetItem(list_position, 3, str(curve.subbatch))
+            self.list.SetItem(list_position, 4, str(0))
+            self.list.SetItemData(list_position, curve_index)
+            list_position = list_position + 1  
         
         
     def on_quit(self, e):
@@ -407,15 +423,8 @@ class Main_window(wx.Frame):
             self.canvas.draw(self.cache.cached)
 
             # Write curve info to listbox
-            list_position = 0
-            for curve_index, curve in self.cache.cached.items():
-                self.list.InsertItem(list_position, str(curve_index))
-                self.list.SetItem(list_position, 1, str(curve.table))
-                self.list.SetItem(list_position, 2, str(curve.batch))
-                self.list.SetItem(list_position, 3, str(curve.subbatch))
-                self.list.SetItem(list_position, 4, str(0))
-                self.list.SetItemData(list_position, curve_index)
-                list_position = list_position + 1  
+            self.update_listbox()
+
     
     def on_slider(self, event):
         height_value = self.height_slider.GetValue()
@@ -447,7 +456,7 @@ class Main_window(wx.Frame):
 
             self.cache.clear()
             self.canvas.clear()
-            self.list.DeleteAllItems()
+            self.update_listbox()
 
     def on_save(self, e):
 
@@ -459,11 +468,13 @@ class Main_window(wx.Frame):
         
         result = self.cache.undo()
         self.canvas.draw(self.cache.cached)
+        self.update_listbox()
 
     def on_redo(self, e):
         
         result = self.cache.redo()
         self.canvas.draw(self.cache.cached)
+        self.update_listbox()
 
 
 
