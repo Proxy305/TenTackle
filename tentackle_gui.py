@@ -319,8 +319,9 @@ class Main_window(wx.Frame):
 
         mb_open = wx.MenuItem(file_menu, wx.ID_ANY, '&Open project...\tCtrl+O')
         file_menu.Append(mb_open)
+        self.Bind(wx.EVT_MENU, self.on_open, mb_open)
 
-        mb_save = wx.MenuItem(file_menu, wx.ID_ANY, '&Save project...\tCtrl+S')
+        mb_save = wx.MenuItem(file_menu, wx.ID_ANY, '&Save snapshot as ...\tCtrl+S')
         file_menu.Append(mb_save)
         self.Bind(wx.EVT_MENU, self.on_save, mb_save)
 
@@ -408,9 +409,12 @@ class Main_window(wx.Frame):
         # Get the file to be opened
 
         file_dialog = wx.FileDialog(self, "Open .csv", "", "", "Shimadzu raw data file (*.csv)|*.csv", wx.FD_OPEN | wx.FD_FILE_MUST_EXIST)
-        file_dialog.ShowModal()
+        dialog_status = file_dialog.ShowModal()
         file_path = file_dialog.GetPath()
         file_dialog.Destroy()
+
+        if dialog_status == wx.ID_CANCEL:
+            return
 
         # Set up the import dialog, and then open the dialog
         # The import dialog was not destroyed and kepted for next use
@@ -458,10 +462,49 @@ class Main_window(wx.Frame):
             self.canvas.clear()
             self.update_listbox()
 
+    def on_open(self, e):
+
+        file_path = ''
+        file_dialog = wx.FileDialog(self, "Open snapshot .json", "", "", "Snapshot json (*.json)|*.json", wx.FD_OPEN | wx.FD_FILE_MUST_EXIST)
+        dialog_status = file_dialog.ShowModal()
+        file_path = file_dialog.GetPath()
+        file_dialog.Destroy()
+
+        if dialog_status == wx.ID_CANCEL:
+            return
+
+        result = self.cache.restore_snapshot(file_path = file_path)
+        if result != -1:
+
+            if result == -2:
+                # It the current history stack is not empty, ask user what to do
+                reply = wx.MessageBox('The current cache is not empty!\n All unsaved data will be lost if another file is loaded.\n Press OK if you still wish to proceed.', "Warning", wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_EXCLAMATION)
+                self.cache.restore_snapshot(file_path = file_path, force = True)
+
+            # If no error at all
+            self.canvas.draw(self.cache.cached)
+            self.update_listbox()
+
+            # Set window title
+            self.SetTitle('TenTackle GUI - ' + file_path)
+        else:
+            wx.MessageBox('Error occured opening file.', "Warning", wx.OK | wx.ICON_EXCLAMATION)
+
+
     def on_save(self, e):
 
-        file_path = self.cache.take_snapshot()
-        if file_path == 0:
+        file_path = ''
+
+        file_dialog = wx.FileDialog(self, "Save snapshot", "", "", "TenTackle snapshot (*.json)|*.json", wx.FD_SAVE)
+        file_dialog = file_dialog.ShowModal()
+        file_path = file_dialog.GetPath()
+        file_dialog.Destroy()
+
+        if dialog_status == wx.ID_CANCEL:
+            return
+
+        result = self.cache.take_snapshot(file_path = file_path)
+        if result == -1:
             wx.MessageBox('Error occured during saving to file.', "Warning", wx.OK | wx.ICON_EXCLAMATION)
 
     def on_undo(self, e):

@@ -540,6 +540,32 @@ class Curve_cache():
 
         return succeeded, can_proceed
 
+    def reset(self):
+
+        '''
+            Nuke everything
+        '''
+        self._curve_index = 0
+        self._cache = {}
+        self._cache_status = {}
+        self._snapshot = []
+        self._pointer = -1
+
+        self.update_snapshot()
+    
+    def is_empty(self):
+
+        '''
+            Tells if the cache object have data or not
+        '''
+        # All actions generates history snapshots
+        # If history snapshot is empty, then this cache can be deemed empty
+        print(self._snapshot)
+        print(len(self._snapshot))
+        if len(self._snapshot) == 1:
+            return True
+        else:
+            return False
 
 
     def clear(self):
@@ -609,9 +635,9 @@ class Curve_cache():
     def take_snapshot(self, file_path = None):
 
         '''
-            Dump current cache to a .tcs.json ((T)entackle (C)ache (S)napshot file, for editing in the future
+            Dump current cache to a .json file, for editing in the future
 
-            file_path: optional, specifies the save path of the .tcs.json file. If no path selected, the file will be saved to the same path and with the same name as the .csv table file of first curve in cache.
+            file_path: optional, specifies the save path of the .json file. If no path selected, the file will be saved to the same path and with the same name as the .csv table file of first curve in cache.
         '''
 
         # Figure out where to save the dump file
@@ -619,13 +645,13 @@ class Curve_cache():
         path = ''
 
         if file_path != None:
-            if file_path.endswith('.tcs.json'):
+            if file_path.endswith('.json'):
                 path = file_path
             else:
-                path = file_path + '.tcs.json'
+                path = file_path + '.json'
         else:
             first_pos = list(self._cache.keys())[0]   # Get index of the 1st element in cache
-            path = os.path.splitext(self._cache[first_pos].table.file_name)[0] + '.tcs.json'
+            path = os.path.splitext(self._cache[first_pos].table.file_name)[0] + '.json'
             logger.debug('No file path specified for dumping. Saving file to default location: %s' % path)
 
 
@@ -653,21 +679,57 @@ class Curve_cache():
             return file_path
         except Exception as e:
             logger.debug(e)
-            return 0
+            return -1
 
             
 
 
-    def restore_from_snapshot(self, file_path):
+    def restore_snapshot(self, file_path, force = False):
 
         '''
-            Retore cache from a .tcs.json ((T)entackle (C)ache (S)napshot file
+            Retore cache from a .json snapshot file
 
-            file_path: specifies the .tcs.json file to retore
+            file_path: string, specifies the .json file to retore
+            force: bool, if True, then anything in current cache will be overwritten; if False, then this function will refuse to restore if something is already in the cache.
         '''
+        if self.is_empty() == True or force == True:
+            # Reset the current cache
+            self.reset()
+            
+            if os.path.isfile(file_path) and file_path.endswith('.json'):
+                try:
+                    with open(file_path, 'r') as fp:
+                        data = json.load(fp)
 
-        if os.path.isfile(file_path) and file_path.endswith('.tcs.json'):
-            pass
+                        # Load data to cache
+                        for data_file, selection_list in data.items():
+                            table = Table(data_file)
+
+                            # Construct selection info in the format required by self.cache()
+                            selections = []
+                            for selection in selection_list:
+                                selections.append(tuple(i for i in selection))
+
+                            # Cache items
+                            self.cache(table, selections)
+
+                        # Compress snapshot stack, so the whole restoration process will be treated as one action
+                        del self._snapshot[1 : len(self._snapshot) - 1]
+                        self._pointer = 1
+
+                        return 0
+
+                except FileNotFoundError as e:
+                    pass
+                except json.JSONDecodeError as e:
+                    # When something's wrong with the json file
+                    pass
+            else:
+                return -1
+        elif self.is_empty() == False and force != True:
+            return -2
+            
+            
         
         
 # Plotting function
