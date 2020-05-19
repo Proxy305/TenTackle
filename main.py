@@ -286,8 +286,10 @@ class Curve_cache():
         self._curve_index = 0     # A counter for generating unique index for curves
         self._cache = {}    # Selection records, format: {index: Curve, ...}
         self._cache_status = {}     # Current status of the cache, a LUT for looking up index and truncation of selected curves of each table file being cached, structure: {file_name: {index1: trunction, index2: truncation, ...}}
-        self._snapshot = [] # Snapshot for self.cache_status(), structure: [cache_status_1, cache_status_2, ...]
+        self._snapshot = [] # Snapshot stack for self.cache_status(), structure: [cache_status_1, cache_status_2, ...]
         self._pointer = -1  # A pointer indicating the current position in status snapshot
+        self._snapshot_saved_pos = None # A position in self._snapshot, at which the snapshot has been saved to a JSON snapshot file
+        self._working_snapshot_file = None # The path of active JSON snapshot file
         self.name = name
         
         self.update_snapshot()  # Set initial status
@@ -307,6 +309,26 @@ class Curve_cache():
                 curves_list[index] = var
 
         return curves_list
+
+    @property
+    def modified(self):
+        
+        '''
+            Tells if the current cache status is different from last save/load process
+        '''
+
+        if self._snapshot_saved_pos == self._pointer:
+            return False
+        else:
+            return True
+
+    @property
+    def working_snapshot_file(self):
+
+        '''
+            Get the currently active snapshot file
+        '''
+        return self._working_snapshot_file
 
     def cache(self, table, selections = None):
 
@@ -550,6 +572,8 @@ class Curve_cache():
         self._cache_status = {}
         self._snapshot = []
         self._pointer = -1
+        self._snapshot_saved_pos = None
+        self._working_snapshot_file = None
 
         self.update_snapshot()
     
@@ -635,21 +659,27 @@ class Curve_cache():
     def take_snapshot(self, file_path = None):
 
         '''
-            Dump current cache to a .json file, for editing in the future
+            Save current cache to a .json file, for editing in the future
 
-            file_path: optional, specifies the save path of the .json file. If no path selected, the file will be saved to the same path and with the same name as the .csv table file of first curve in cache.
+            file_path: optional, specifies the save path of the .json file. If no path selected, will first attempt to save to the current active JSON snapshot file. If active JSON file path has not been set, save to the same directory as the corresponding .csv file of the 1st curve.
         '''
 
-        # Figure out where to save the dump file
+        # Figure out where to save the save file
 
         path = ''
 
         if file_path != None:
+            # If a path is given, check if the path is legal and correct it
             if file_path.endswith('.json'):
                 path = file_path
             else:
                 path = file_path + '.json'
+
+        elif self._working_snapshot_file != None:
+            # If no path is given but active JSON file path has been set, use the latter
+            path = self._working_snapshot_file
         else:
+            # If no path is given and no active JSON file path has been set, save to the same directory as the corresponding .csv file of the 1st curve.
             first_pos = list(self._cache.keys())[0]   # Get index of the 1st element in cache
             path = os.path.splitext(self._cache[first_pos].table.file_name)[0] + '.json'
             logger.debug('No file path specified for dumping. Saving file to default location: %s' % path)
@@ -676,6 +706,12 @@ class Curve_cache():
         try:
             with open(path, 'w') as fp:
                 json.dump(lut, fp)
+                
+                # Mark the current status as "saved"
+                self._snapshot_saved_pos = self._pointer
+                # Set new working JSON path
+                self._working_snapshot_file = path
+
             return file_path
         except Exception as e:
             logger.debug(e)
@@ -716,6 +752,12 @@ class Curve_cache():
                         # Compress snapshot stack, so the whole restoration process will be treated as one action
                         del self._snapshot[1 : len(self._snapshot) - 1]
                         self._pointer = 1
+
+                        # Mark the current status as "saved"
+                        self._snapshot_saved_pos = self._pointer
+
+                        # Set the current active snapshot file path
+                        self._working_snapshot_file = file_path
 
                         return 0
 

@@ -321,12 +321,13 @@ class Main_window(wx.Frame):
         file_menu.Append(mb_open)
         self.Bind(wx.EVT_MENU, self.on_open, mb_open)
 
-        mb_save = wx.MenuItem(file_menu, wx.ID_ANY, '&Save snapshot as ...\tCtrl+S')
-        file_menu.Append(mb_save)
-        self.Bind(wx.EVT_MENU, self.on_save, mb_save)
+        self.mb_save = wx.MenuItem(file_menu, wx.ID_ANY, '&Save snapshot \tCtrl+S')
+        file_menu.Append(self.mb_save)
+        self.Bind(wx.EVT_MENU, self.on_save, self.mb_save)
 
-        mb_save_as = wx.MenuItem(file_menu, wx.ID_ANY, '&Save project as...\tCtrl+Shift+S')
-        file_menu.Append(mb_save_as)
+        self.mb_save_as = wx.MenuItem(file_menu, wx.ID_SAVEAS, '&Save snapshot as ...\tCtrl+S')
+        file_menu.Append(self.mb_save_as)
+        self.Bind(wx.EVT_MENU, self.on_save, self.mb_save_as)
 
         mb_new = wx.MenuItem(file_menu, wx.ID_ANY, '&New project\tCtrl+N')
         file_menu.Append(mb_new)
@@ -493,19 +494,25 @@ class Main_window(wx.Frame):
 
     def on_save(self, e):
 
-        file_path = ''
+        file_path = None
 
-        file_dialog = wx.FileDialog(self, "Save snapshot", "", "", "TenTackle snapshot (*.json)|*.json", wx.FD_SAVE)
-        file_dialog = file_dialog.ShowModal()
-        file_path = file_dialog.GetPath()
-        file_dialog.Destroy()
-
-        if dialog_status == wx.ID_CANCEL:
-            return
+        # To find out who is calling, save or save as?
+        print(e.GetEventObject().GetTitle())
+        if e.GetId() == wx.ID_SAVEAS:      
+            # If the caller is save as, then ask user where to save
+            file_dialog = wx.FileDialog(self, "Save snapshot", "", "", "TenTackle snapshot (*.json)|*.json", wx.FD_SAVE)
+            dialog_status = file_dialog.ShowModal()
+            file_path = file_dialog.GetPath()
+            file_dialog.Destroy()
+            if dialog_status == wx.ID_CANCEL:
+                return
 
         result = self.cache.take_snapshot(file_path = file_path)
         if result == -1:
             wx.MessageBox('Error occured during saving to file.', "Warning", wx.OK | wx.ICON_EXCLAMATION)
+
+        # Get the save path, then update title bar
+        self.SetTitle('TenTackle GUI - ' + self.cache.working_snapshot_file)
 
     def on_undo(self, e):
         
