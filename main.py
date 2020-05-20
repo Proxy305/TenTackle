@@ -584,8 +584,6 @@ class Curve_cache():
         '''
         # All actions generates history snapshots
         # If history snapshot is empty, then this cache can be deemed empty
-        print(self._snapshot)
-        print(len(self._snapshot))
         if len(self._snapshot) == 1:
             return True
         else:

@@ -324,6 +324,7 @@ class Main_window(wx.Frame):
         self.mb_save = wx.MenuItem(file_menu, wx.ID_ANY, '&Save snapshot \tCtrl+S')
         file_menu.Append(self.mb_save)
         self.Bind(wx.EVT_MENU, self.on_save, self.mb_save)
+        self.mb_save.Enable(False)
 
         self.mb_save_as = wx.MenuItem(file_menu, wx.ID_SAVEAS, '&Save snapshot as ...\tCtrl+S')
         file_menu.Append(self.mb_save_as)
@@ -429,6 +430,14 @@ class Main_window(wx.Frame):
 
             # Write curve info to listbox
             self.update_listbox()
+            
+            working_file_path = self.cache.working_snapshot_file
+            if working_file_path != None:
+                # If an active file has been set
+                self.mb_save.Enable(True)  # Enable "save" menubar item
+                self.SetTitle('TenTackle GUI - ' + working_file_path + '*')
+            else:
+                self.SetTitle('TenTackle GUI - *')
 
     
     def on_slider(self, event):
@@ -463,6 +472,15 @@ class Main_window(wx.Frame):
             self.canvas.clear()
             self.update_listbox()
 
+            working_file_path = self.cache.working_snapshot_file
+            if working_file_path != None:
+                # If an active file has been set
+                self.mb_save.Enable(True)  # Enable "save" menubar item
+                self.SetTitle('TenTackle GUI - ' + working_file_path + '*')
+            else:
+                self.SetTitle('TenTackle GUI - *')
+
+
     def on_open(self, e):
 
         file_path = ''
@@ -488,6 +506,9 @@ class Main_window(wx.Frame):
 
             # Set window title
             self.SetTitle('TenTackle GUI - ' + file_path)
+
+            # Disable "save" menubar item
+            self.mb_save.Enable(False)
         else:
             wx.MessageBox('Error occured opening file.', "Warning", wx.OK | wx.ICON_EXCLAMATION)
 
@@ -497,7 +518,6 @@ class Main_window(wx.Frame):
         file_path = None
 
         # To find out who is calling, save or save as?
-        print(e.GetEventObject().GetTitle())
         if e.GetId() == wx.ID_SAVEAS:      
             # If the caller is save as, then ask user where to save
             file_dialog = wx.FileDialog(self, "Save snapshot", "", "", "TenTackle snapshot (*.json)|*.json", wx.FD_SAVE)
@@ -514,17 +534,45 @@ class Main_window(wx.Frame):
         # Get the save path, then update title bar
         self.SetTitle('TenTackle GUI - ' + self.cache.working_snapshot_file)
 
+        # Disable "save" menubar item
+        self.mb_save.Enable(False)
+
     def on_undo(self, e):
         
         result = self.cache.undo()
         self.canvas.draw(self.cache.cached)
         self.update_listbox()
 
+        working_file_path = self.cache.working_snapshot_file
+        if self.cache.modified == True:
+            # If the cache is in a modified stage, unlock save function and rewrite title bar to indicate change has been made
+            
+            if working_file_path != None:
+                self.mb_save.Enable(True)  # Enable "save" menubar item
+                self.SetTitle('TenTackle GUI - ' + working_file_path + '*')
+            else:
+                self.SetTitle('TenTackle GUI - *')
+        else:
+            self.SetTitle('TenTackle GUI - ' + working_file_path)
+            
+
     def on_redo(self, e):
         
         result = self.cache.redo()
         self.canvas.draw(self.cache.cached)
         self.update_listbox()
+
+        working_file_path = self.cache.working_snapshot_file
+        if self.cache.modified == True:
+            # If the cache is in a modified stage, unlock save function and rewrite title bar to indicate change has been made
+            
+            if working_file_path != None:
+                self.mb_save.Enable(True)  # Enable "save" menubar item
+                self.SetTitle('TenTackle GUI - ' + working_file_path + '*')
+            else:
+                self.SetTitle('TenTackle GUI - *')
+        else:
+            self.SetTitle('TenTackle GUI - ' + working_file_path)
 
 
 
