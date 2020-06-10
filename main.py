@@ -121,7 +121,7 @@ class Table:
         super().__init__()
         
         self.tables = []    # Keeps all table raw infomation
-        self.file_name = filename
+        self._file_name = filename
 
         # Split multiple tables in single .csv file
         with open(filename, newline='', encoding='Shift-JIS') as f:
@@ -155,8 +155,12 @@ class Table:
         self.truncation_records = [[0 for i in range(self.batch_count)] for j in range(self.subbatch_count)]
 
     @property
-    def table_name():
+    def table_name(self):
         return self._table_name
+
+    @property
+    def file_name(self):
+        return self._file_name
 
     def dimensions(self, batch, subbatch):
 
@@ -224,9 +228,9 @@ class Curve():
 
         super().__init__()
 
-        self.table = table
-        self.batch = batch
-        self.subbatch = subbatch
+        self._table = table # Read only
+        self._batch = batch # Read only
+        self._subbatch = subbatch   # Read only
         self.truncate_point = truncate_point
 
     def get_data(self, truncate = False):
@@ -244,6 +248,18 @@ class Curve():
 
     def __str__(self):
         return '%s-%d-%d' % (str(self.table), self.batch, self.subbatch)
+
+    @property
+    def table(self):
+        return self._table
+
+    @property
+    def batch(self):
+        return self._batch
+
+    @property
+    def subbatch(self):
+        return self._subbatch            
 
     @property
     def slope(self):
@@ -267,20 +283,52 @@ class Curve_cache():
     def __init__(self, name = None):
         super().__init__()
 
-        self._index = 0     # A counter for generating unique index
-        self._cache = {}    # Selection records, format: [(table, (batch, subbatch, truncation))]
+        self._curve_index = 0     # A counter for generating unique index for curves
+        self._cache = {}    # Selection records, format: {index: Curve, ...}
+        self._cache_status = {}     # Current status of the cache, a LUT for looking up index and truncation of selected curves of each table file being cached, structure: {file_name: {index1: trunction, index2: truncation, ...}}
+        self._snapshot = [] # Snapshot stack for self.cache_status(), structure: [cache_status_1, cache_status_2, ...]
+        self._pointer = -1  # A pointer indicating the current position in status snapshot
+        self._snapshot_saved_pos = None # A position in self._snapshot, at which the snapshot has been saved to a JSON snapshot file
+        self._working_snapshot_file = None # The path of active JSON snapshot file
         self.name = name
-        # self._strength_pool = [] # A pool containing strength of every curve
-        # self._slope_pool = []    # A pool containing slope of every curve
+        
+        self.update_snapshot()  # Set initial status
 
     @property
     def cached(self):
 
         '''
-            Return the current cache
+            Construct a list of curves
         '''
 
-        return self._cache
+        curves_list = {}
+
+        for table_file, info_dict in self._cache_status.items():
+            for index, turncation_point in info_dict.items():
+                var = self._cache[index]
+                curves_list[index] = var
+
+        return curves_list
+
+    @property
+    def modified(self):
+        
+        '''
+            Tells if the current cache status is different from last save/load process
+        '''
+
+        if self._snapshot_saved_pos == self._pointer:
+            return False
+        else:
+            return True
+
+    @property
+    def working_snapshot_file(self):
+
+        '''
+            Get the currently active snapshot file
+        '''
+        return self._working_snapshot_file
 
     def cache(self, table, selections = None):
 
@@ -290,18 +338,25 @@ class Curve_cache():
             table: a Table() object
             selections: list of selction
             * selection: a tuple containing batch (required), subbatch (required), truncation point (optional)
+
+            Notice: If a table has been cached before, then when it is cached again, the previous caching action gets reverted. All table objects pointing to a same data file will be deemed as the same object.
         '''
+
+        cached_info = {}     # List of indices of cached curves of the current operating table file
 
         # If selection exists, then cache the selections:
         if selections != None:
             for selection in selections:
                 # Validate each selection, make sure data for a given batch/subbatch combination exists
                 if table.get_curve_data(selection[0], selection[1], dry_run = True) == True:
+                    truncate_point = -1
                     if len(selection) == 3: # If selection contains truncation point data
-                        self._cache[self._index] = Curve(table, selection[0], selection[1], selection[2])  # Set truncation if truncation data exists
+                        self._cache[self._curve_index] = Curve(table, selection[0], selection[1], selection[2])  # Set truncation if truncation data exists
+                        truncate_point = selection[2]
                     else:
-                        self._cache[self._index] = Curve(table, selection[0], selection[1])
-                    self._index += 1    # Set index counter
+                        self._cache[self._curve_index] = Curve(table, selection[0], selection[1])
+                    cached_info[self._curve_index] = truncate_point    # Write to list of index of selection
+                    self._curve_index += 1    # Set index counter
 
         # If no selection has been specified, then cache everything in the table
         else:
@@ -309,8 +364,27 @@ class Curve_cache():
             for batch in range (1, table.batch_count+1):
                 for subbatch in range(1, table.subbatch_count+1):
                     if table.get_curve_data(batch, subbatch, dry_run = True) == True:
-                        self._cache[self._index] = Curve(table, batch, subbatch)
-                        self._index += 1    # Set index counter
+                        self._cache[self._curve_index] = Curve(table, batch, subbatch)
+                        cached_info[self._curve_index] = -1 # -1: default runcation point (no truncation)
+                        self._curve_index += 1    # Set index counter
+
+
+        # Validate if this table has been cached before
+        # if self._cache_status.get(table.file_name) != None:
+        #     # If this table has been cached before, revert the cache action
+        #     print("fuck python!")
+        #     self.remove_by_indices(self._cache_status[table.file_name])
+        # Write import record
+        self._cache_status[table.file_name] = cached_info
+
+        # Update status snapshot
+        self.update_snapshot()
+
+        # Return indices of cached curves
+        cached_indices = []
+        for index, truncation in cached_info.items():
+            cached_indices.append(index)
+        return cached_indices
             
 
     def cache_s(self, table, selection_str = ''):
@@ -339,29 +413,213 @@ class Curve_cache():
 
         self.cache(table, selections)
 
+    def set_truncation(self, index, truncate_at):
+
+        '''
+            Set truncation point for a curve in cache
+
+            index: index of the curve in cache
+            truncate_ at: percentage turncation point
+        '''
+        
+        # Lookup the table file for the curve
+        curve = self._cache[index]
+
+        # Rewrite truncation point information
+        self._cache_status[curve.table_file][index] = truncate_at
+        curve.truncate_point = truncate_at  # Legacy compatibility solution
+
+        # Update snapshot
+        self.update_snapshot()
+
+
+
+    def remove(self, index):
+
+        '''
+            Remove one curve in cache, by its index
+        '''
+
+        self._cache.pop(index, None)
+
+
+    def remove_by_indices(self, indices):
+
+        '''
+            Remove multiple curves specified by a list of indices in cache. A wrapper for Curve_cache.remove()
+
+            indices: a list of index
+        '''
+
+        for index in indices:
+
+            self.remove(index)
+
+    def revert(self, file_name):
+
+        '''
+            Revert a certain cache action specified by file name
+        '''
+
+        cached_info = self._cache_status.get(file_name)
+        
+        if cached_info  != None:
+            # self.remove_by_indices(cached_info)     
+            self._cache_status.pop(file_name)
+
+        self.update_snapshot()
+
+    def update_snapshot(self):
+
+        '''
+            Update snapshot and manage pointer
+        '''
+
+        # Verify if there is anything beyond the current pointer position
+        if len(self._snapshot) > self._pointer + 1:
+            # If yes, then drop everything beyond
+            self._snapshot = self._snapshot[: self._pointer + 1]
+
+        # Move pointer
+        self._pointer += 1
+
+        # Update snapshot
+
+        self._snapshot.append(self._cache_status.copy())
+
+
+    def undo(self, dry_run = False):
+
+        '''
+            Roll the current cache information one version back
+
+            dry_run: if True, then only whether the cache information can be rolled back to the designated version will verified, and no real rolling back action will be done.
+
+            Return value: (bool1, bool2)
+            - bool1: Whether the current operation has succeeded. Always true when dry_run is true.
+            - bool2: Whether there is enough version in the snapshot so another undo can be performed
+        '''
+
+        succeeded = True   # Flag: If the current operation has succeeded
+        can_proceed = False # Flag: If another undo can be performed
+
+        # Verify if the status can be reverted to 1 version before
+        if self._pointer > 0:
+            
+            # If not in dry_run mode, do the undo process:
+            if dry_run != True:
+
+                # If something can be undone, move pointer
+                self._pointer -= 1
+
+                # Rewrite cache status
+                self._cache_status = self._snapshot[self._pointer].copy()
+
+            # If the status can be further reverted
+            if self._pointer > 0:
+                can_proceed = True
+        
+        else:
+            succeeded = False
+
+        return succeeded, can_proceed
+        
+
+
+    def redo(self, dry_run = False):
+        
+        '''
+            Move the current cache information one version Forward
+
+            dry_run: if True, then only whether the cache information can be restored to the designated version will verified, and no real restoration action will be done.
+
+            Return value: (bool1, bool2)
+            - bool1: Whether the current operation has succeeded. Always true when dry_run is true.
+            - bool2: Whether there is enough version in the snapshot so another undo can be performed
+        '''
+
+        succeeded = True   # Flag: If the current operation has succeeded
+        can_proceed = False # Flag: If another undo can be performed
+
+        # Verify if the status can be moved to 1 version after
+        if len(self._snapshot) - self._pointer > 1:
+            
+            # If not in dry_run mode, do the redo process:
+            if dry_run != True:
+
+                # If something can be redone, move pointer
+                self._pointer += 1
+
+                # Rewrite cache status
+                self._cache_status = self._snapshot[self._pointer].copy()
+
+            # If the status can be further moved
+            if len(self._snapshot) - self._pointer > 1:
+                can_proceed = True
+        
+        else:
+            succeeded = False
+
+        return succeeded, can_proceed
+
+    def reset(self):
+
+        '''
+            Nuke everything
+        '''
+        self._curve_index = 0
+        self._cache = {}
+        self._cache_status = {}
+        self._snapshot = []
+        self._pointer = -1
+        self._snapshot_saved_pos = None
+        self._working_snapshot_file = None
+
+        self.update_snapshot()
+    
+    def is_empty(self):
+
+        '''
+            Tells if the cache object have data or not
+        '''
+        # All actions generates history snapshots
+        # If history snapshot is empty, then this cache can be deemed empty
+        if len(self._snapshot) == 1:
+            return True
+        else:
+            return False
+
+
     def clear(self):
         
         '''
-            Delete all curves in cache
+            Delete all curves in cache status
         '''
 
-        self._cache = []
+        self._cache_status = {}
+
+        self.update_snapshot()
 
     def analyze(self):
         strength_pool = []
         slope_pool = []
 
-        # Make sure that there's something in the
-        if self._cache == {}:
+        curve_list = self.cached # Get curves that are current in curve_status
+        
+        # Make sure that there's something in the cache
+        if curve_list == {}:
             logger.error('No selection in curve cache "%s"' % self.name)
             return 0
 
 
-        for index, curve in self._cache.items():
+        for index, curve in curve_list.items():
             strength_pool.append(curve.max_stress)
             slope_pool.append(curve.slope)
 
         strength_array = np.array(strength_pool)
+        slope_array = np.array(slope_pool)
+
+        print(slope_pool)
 
         analysis_result = { # Dictionary object of analysis result
 
@@ -369,8 +627,8 @@ class Curve_cache():
 
                 # Young's Modulus
 
-                'value': np.average(slope_pool),
-                'std': np.std(slope_pool)
+                'value': np.average(slope_array[:, 0]),
+                'std': np.std(slope_array[:, 0])
             },
             'uts':{
 
@@ -396,6 +654,122 @@ class Curve_cache():
 
         return analysis_result        
 
+    def take_snapshot(self, file_path = None):
+
+        '''
+            Save current cache to a .json file, for editing in the future
+
+            file_path: optional, specifies the save path of the .json file. If no path selected, will first attempt to save to the current active JSON snapshot file. If active JSON file path has not been set, save to the same directory as the corresponding .csv file of the 1st curve.
+        '''
+
+        # Figure out where to save the save file
+
+        path = ''
+
+        if file_path != None:
+            # If a path is given, check if the path is legal and correct it
+            if file_path.endswith('.json'):
+                path = file_path
+            else:
+                path = file_path + '.json'
+
+        elif self._working_snapshot_file != None:
+            # If no path is given but active JSON file path has been set, use the latter
+            path = self._working_snapshot_file
+        else:
+            # If no path is given and no active JSON file path has been set, save to the same directory as the corresponding .csv file of the 1st curve.
+            first_pos = list(self._cache.keys())[0]   # Get index of the 1st element in cache
+            path = os.path.splitext(self._cache[first_pos].table.file_name)[0] + '.json'
+            logger.debug('No file path specified for dumping. Saving file to default location: %s' % path)
+
+
+        # Construst LUT for curves that has been cached
+        # LUT is like another version of self._cache_status; Hovever, the value of each item is a tuple containing curve info.
+        lut = {}    # Structure of LUT: {filename:[(batch, subbatch, truncation), ...]}
+
+        for file_name, indices in self._cache_status.items():
+            
+            curve_info_list = []
+
+            # Translation from index to info tuple
+            for index in indices:
+                curve = self._cache[index]
+                curve_info_list.append((curve.batch, curve.subbatch, curve.truncate_point))
+
+            lut[file_name] = curve_info_list
+
+        
+        # Save to file
+
+        try:
+            with open(path, 'w') as fp:
+                json.dump(lut, fp)
+                
+                # Mark the current status as "saved"
+                self._snapshot_saved_pos = self._pointer
+                # Set new working JSON path
+                self._working_snapshot_file = path
+
+            return file_path
+        except Exception as e:
+            logger.debug(e)
+            return -1
+
+            
+
+
+    def restore_snapshot(self, file_path, force = False):
+
+        '''
+            Retore cache from a .json snapshot file
+
+            file_path: string, specifies the .json file to retore
+            force: bool, if True, then anything in current cache will be overwritten; if False, then this function will refuse to restore if something is already in the cache.
+        '''
+        if self.is_empty() == True or force == True:
+            # Reset the current cache
+            self.reset()
+            
+            if os.path.isfile(file_path) and file_path.endswith('.json'):
+                try:
+                    with open(file_path, 'r') as fp:
+                        data = json.load(fp)
+
+                        # Load data to cache
+                        for data_file, selection_list in data.items():
+                            table = Table(data_file)
+
+                            # Construct selection info in the format required by self.cache()
+                            selections = []
+                            for selection in selection_list:
+                                selections.append(tuple(i for i in selection))
+
+                            # Cache items
+                            self.cache(table, selections)
+
+                        # Compress snapshot stack, so the whole restoration process will be treated as one action
+                        del self._snapshot[1 : len(self._snapshot) - 1]
+                        self._pointer = 1
+
+                        # Mark the current status as "saved"
+                        self._snapshot_saved_pos = self._pointer
+
+                        # Set the current active snapshot file path
+                        self._working_snapshot_file = file_path
+
+                        return 0
+
+                except FileNotFoundError as e:
+                    pass
+                except json.JSONDecodeError as e:
+                    # When something's wrong with the json file
+                    pass
+            else:
+                return -1
+        elif self.is_empty() == False and force != True:
+            return -2
+            
+            
         
         
 # Plotting function
@@ -588,3 +962,11 @@ if __name__ == "__main__":
                 print("Invalid action.")
     else:
         logger.error("No file specified. Exit.\n Use -h for help.")
+
+else:
+    # Logging settings (when used as a module)
+    logger = logging.getLogger(__name__)
+    logger.setLevel(level=logging.DEBUG)
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    logger.addHandler(ch)
