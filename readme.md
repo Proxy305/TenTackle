@@ -1,26 +1,28 @@
 # TenTackle
 
-![Preview](https://github.com/Proxy305/TenTackle/blob/gh-pages/synth.png?raw=true)
+![Preview](https://github.com/Proxy305/TenTackle/blob/gh-pages/main.png?raw=true)
 
-Tensile data analysis assisting tool for Shimazu.
+Tensile data analysis assisting tool for Shimazu EZ series.
 
 ## Introduction
 
-TenTackle assists with analysis of raw tensile data from certain models of Shimazu universal testing machine.
+TenTackle assists with analysis of raw tensile data from certain models of Shimazu universal testing machine (namely, Shimazu EZ series).
 
-**Warning**: TenTackle is NOT a general purpose software. Do not download if you are not aware of its intended usage.
+**Warning**: TenTackle is NOT a general purpose software. Only download if you are authorized and are well aware of its intended usage.
 
 ## Function
 
+- Raw data (.csv) processing
 - Plotting of stress/strain curve
     - Select curve(s) from one or more file
-    - Automatically creates legends according to file name
+    - Automatically creates curve labels base on file name
 - Customization of plotting
     - Specify unit for each axis
     - Plot all curves in one image, or in individual image
-- Data analysis
-    - UTS (Ultimate Tensile Strength)
+- Simple Data analysis
+    - UTS (Ultimate Tensile Strength), and strain at UTS
     - Young's Modulus
+    - Toughness (Experimental)
 
 ## Deploy
 
@@ -29,29 +31,56 @@ TenTackle assists with analysis of raw tensile data from certain models of Shima
 - Python 3+
 - NumPy
 - Matplotlib
-- Git (optional)
+- wxPython (optional, GUI mode only)
+- Git (optional, but recommended)
 
 ### Installation
 
-1. Install Python3.
-2. Open command prompt, install NumPy:
+1. Install [Python3](https://www.python.org/downloads/).
+2. Open command prompt, install NumPy and matplotlib:
 
-``` pip install numpy ```
+``` pip3 install numpy matplotlib ```
 
-3. Install Matplotlib:
+3. Install wxpython if you wish to use GUI mode. (Optional)
 
-``` pip install matplotlib```
+``` pip3 install wxpython ```
 
-4. Clone this repository to local, or download zip of this repository.
+4. Clone this repository to local (recommended) (suppose you have git installed), 
+
+``` git clone https://github.com/Proxy305/TenTackle.git ```
+
+or download zip of this repository.
+
 5. Now TenTackle is ready to use. Run in command prompt:
+
+Single shot CLI mode:
 
 ```
 python3 main.py [-h] [-f FILE] [-i] [-v] [-l] [-c COMPOSE_MODE] [-s SELECT] [-r SLOPE_RANGE]
 ```
 
+Interactive CLI mode:
+
+```
+python3 main.py -i
+```
+
+GUI mode:
+
+```
+python3 tentackle-gui.py
+```
+
+
 ## Usage
 
-### Command line mode
+### GUI Mode (Experimental)
+
+An experimental GUI is under development. To use the experimental GUI, execute `tentackle_gui.py`.
+
+A brief introduction of toolbar tools can be found in [project wiki](https://github.com/Proxy305/TenTackle/wiki/GUI-Toolbar-tools).
+
+### Single Shot command line mode
 
 In command line mode, TenTackle takes one file, run once and quit. Suitable for single-shot tasks, or embedding TenTackle as a part of an automation process.
 
@@ -113,16 +142,13 @@ Then follow the instructions on screen.
 
 **Note**: All command line arguments, excluding `-v` will be ignored if parameter `-i` is given.
 
-## GUI (Experimental)
+## Glossary
 
-An experimental GUI is under development.
-
-To use the experimental GUI, checkout `gui` branch and run `tentackle_gui.py`.
-
+You may want to read about the [glossary](https://github.com/Proxy305/TenTackle/wiki/Glossary) of TenTackle before you get started. 
 
 ## Disclaimer
 
-TenTackle comes with **ABSOLUTELY NO WARRANTY**. Use at your own risk.
+TenTackle comes with **ABSOLUTELY NO WARRANTY**. Use at your own risk. TenTackle is currently in pre-alpha quality, therefore, always backup important data, and cross-check the results with another general purpose tool (MS Excel, Origin Pro, etc.).
 
 
 
