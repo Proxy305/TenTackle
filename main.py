@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 import json
-
+from scipy import integrate
 
 # Read config file
 config = {}
@@ -42,7 +42,10 @@ else:
         "regression":{
             "start": 0.001,
             "end": 0.01           
-        }
+        },
+        "integration":{
+            "method": "simps"
+    }
 }
 
 # Helper functions: functions that accepts a procecced stress/strain data array
@@ -107,6 +110,22 @@ def idx_of_nearest(array_1d, target):
     '''
 
     return (np.abs(array_1d - target)).argmin()
+
+def integrate_x(array):
+
+    '''
+    Integration of an array at x direction using np.trapz().
+
+    - array: an 2d array with x and y values.
+    '''
+
+    array_x = array[:, 1]
+    array_y = array[:, 0]
+
+    try:
+        return np.trapz(array_y, array_x)
+    except Exception as e:
+        print(e)
 
 
 # Data structures
@@ -299,6 +318,8 @@ class Curve_cache():
 
         '''
             Construct a list of curves
+
+            Legacy method, to be deprecated
         '''
 
         curves_list = {}
@@ -603,23 +624,30 @@ class Curve_cache():
     def analyze(self):
         strength_pool = []
         slope_pool = []
-
-        curve_list = self.cached # Get curves that are current in curve_status
+        toughness_pool = []      
         
         # Make sure that there's something in the cache
-        if curve_list == {}:
+        if self._cache_status == {}:
             logger.error('No selection in curve cache "%s"' % self.name)
             return 0
 
+        for table_file, info_dict in self._cache_status.items():
+            for index, truncation_point in info_dict.items():
 
-        for index, curve in curve_list.items():
-            strength_pool.append(curve.max_stress)
-            slope_pool.append(curve.slope)
+                curve = self._cache[index]
+
+                strength_pool.append(curve.max_stress)
+                slope_pool.append(curve.slope)
+                toughness = (integrate_x(curve.get_data(truncation_point)))/config["axis"]["y_scaling"] # Convert to N/m^2
+                print(toughness)
+                toughness_pool.append(toughness)
 
         strength_array = np.array(strength_pool)
         slope_array = np.array(slope_pool)
+        toughness_array = np.array(toughness_pool)
 
-        print(slope_pool)
+        # print(slope_array)
+        # print(toughness_array)
 
         analysis_result = { # Dictionary object of analysis result
 
@@ -644,13 +672,17 @@ class Curve_cache():
                 'value': np.average(strength_array[:, 1]),
                 'std': np.std(strength_array[:, 1])
 
+            },
+            'toughness':{
+                'value': np.average(toughness_array),
+                'std': np.std(toughness_array) 
             }
         }
         logger.debug(analysis_result.keys())
-        logger.info("Young's modulus for selected samples: %f, standard deviation: %f" % (analysis_result['ym']['value'], analysis_result['ym']['std']))
-        
-        logger.info("UTS for selected samples: %f, standard deviation: %f" % (analysis_result["uts"]["value"], analysis_result["uts"]["std"]))
-        logger.info("Strain at maximum stress for selected samples: %f, standard deviation: %f" % (analysis_result["sams"]["value"], analysis_result["sams"]["std"]))
+        print("Young's modulus for selected samples: %f, standard deviation: %f" % (analysis_result['ym']['value'], analysis_result['ym']['std']))   
+        print("UTS for selected samples: %f, standard deviation: %f" % (analysis_result["uts"]["value"], analysis_result["uts"]["std"]))
+        print("Strain at maximum stress for selected samples: %f, standard deviation: %f" % (analysis_result["sams"]["value"], analysis_result["sams"]["std"]))
+        print("Toughness for selected samples: %f, standard deviation: %f" % (analysis_result["toughness"]["value"], analysis_result["toughness"]["std"]))
 
         return analysis_result        
 
