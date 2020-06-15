@@ -6,6 +6,7 @@ import wx
 import wx.lib.newevent
 import numpy as np
 import matplotlib
+import wx.lib.agw.hyperlink as hl
 # import ObjectListViewgit 
 
 from main import Table, Curve, Curve_cache, config
@@ -92,6 +93,39 @@ class CanvasPanel(wx.Panel):
 
         self.ax.clear()
         self.canvas.draw()
+
+class Console(wx.Panel):
+
+    def __init__(self, *args, **kw):
+
+        super(Console, self).__init__(*args, **kw)
+
+        self.main_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.console_label = wx.StaticText(self, label = 'Console')
+        self.main_sizer.Add(self.console_label, flag=wx.GROW)
+        self.main_sizer.Add((0,10))
+        self.console_text = wx.TextCtrl(self, size = (-1, 100), style = wx.TE_MULTILINE|wx.TE_RICH2|wx.TE_AUTO_URL)
+        self.main_sizer.Add(self.console_text, flag=wx.GROW)
+
+        self.SetSizer(self.main_sizer)
+        self.Fit()
+    
+    def write(self, text, style = None):
+
+        '''
+            Append text to the console.
+
+            text: str, message to be appended
+            style: A wx.TextAttr() style
+        '''
+
+        if style != None:
+            self.console_text.SetDefaultStyle(wx.TextAttr(style))
+        self.console_text.AppendText(text)
+        self.console_text.AppendText("\n--------------------\n")
+
+        
+
 
 class Import_dialog(wx.Dialog):
 
@@ -261,7 +295,9 @@ class Main_window(wx.Frame):
 
         self.init_ui()
 
-        self.main_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.main_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.top_h_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.bottom_h_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.left_v_sizer = wx.BoxSizer(wx.VERTICAL)
         self.right_v_sizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -293,7 +329,7 @@ class Main_window(wx.Frame):
         
 
         
-        self.right_v_sizer.Add(wx.StaticText(self, label = 'Selection'), flag = wx.EXPAND)
+        self.right_v_sizer.Add(wx.StaticText(self, label = 'Selection'), flag = wx.GROW)
         self.right_v_sizer.Add((0,10))
         self.list = wx.ListCtrl(self, wx.ID_ANY, style = wx.LC_REPORT)
         self.list.InsertColumn(0, "Index")
@@ -301,14 +337,24 @@ class Main_window(wx.Frame):
         self.list.InsertColumn(2, "Batch")
         self.list.InsertColumn(3, "Subbatch")
         self.list.InsertColumn(4, "Truncation%")
-        self.right_v_sizer.Add(self.list, proportion = 1, flag = wx.EXPAND)
+        self.right_v_sizer.Add(self.list, proportion = 1, flag = wx.GROW)
 
-        self.main_sizer.Add(self.left_v_sizer, flag = wx.EXPAND|wx.ALL, border = 10)
-        self.main_sizer.Add(self.right_v_sizer, flag = wx.EXPAND|wx.ALL, border = 10)
+
+        
+        self.console = Console(self)
+        self.bottom_h_sizer.Add(self.console, proportion = 10, flag = wx.EXPAND|wx.ALL, border = 10)
+
+        self.top_h_sizer.Add(self.left_v_sizer, flag = wx.EXPAND|wx.ALL, border = 10)
+        self.top_h_sizer.Add(self.right_v_sizer, flag = wx.GROW|wx.ALL, border = 10)
+        self.main_sizer.Add(self.top_h_sizer, flag = wx.EXPAND)
+        self.main_sizer.Add(self.bottom_h_sizer, flag = wx.EXPAND)
         self.SetSizer(self.main_sizer)
 
         self.Fit()
         self.Centre()
+
+        self.console.write("TenTackle Beta - https://github.com/Proxy305/TenTackle")
+        self.console.write("Standby.")
 
     def init_ui(self):
 
@@ -457,8 +503,8 @@ class Main_window(wx.Frame):
 
         result_dict = self.cache.analyze()
         if result_dict != 0:
-            result_str = "YM: %.3f\u00b1%.3f\n UTS: %.3f\u00b1%.3f\n E: %.3f\u00b1%.3f\n" % (result_dict['ym']['value'], result_dict['ym']['std'], result_dict['uts']['value'], result_dict['uts']['std'], result_dict['sams']['value'], result_dict['sams']['std'])
-            wx.MessageBox(result_str, "Analysis results", wx.OK | wx.ICON_EXCLAMATION)
+            result_str = "Analysis result for curves in main cache:\n YM: %.3f\u00b1%.3f\n UTS: %.3f\u00b1%.3f\n E: %.3f\u00b1%.3f\n Toughness: %.3f\u00b1%.3f" % (result_dict['ym']['value'], result_dict['ym']['std'], result_dict['uts']['value'], result_dict['uts']['std'], result_dict['sams']['value'], result_dict['sams']['std'], result_dict['toughness']['value'], result_dict['toughness']['std'])
+            self.console.write(result_str)
         else:
             wx.MessageBox("No curve has been cached!", "Error", wx.OK | wx.ICON_EXCLAMATION)
 
