@@ -6,7 +6,7 @@ import wx
 import wx.lib.newevent
 import numpy as np
 import matplotlib
-import wx.lib.agw.hyperlink as hl
+from matplotlib import pyplot as plt
 # import ObjectListViewgit 
 
 from main import Table, Curve, Curve_cache, config
@@ -93,6 +93,12 @@ class CanvasPanel(wx.Panel):
 
         self.ax.clear()
         self.canvas.draw()
+
+    def save(self, save_path):
+        
+        self.figure.savefig(save_path, dpi=300, bbox_inches='tight')
+        
+
 
 class Console(wx.Panel):
 
@@ -415,17 +421,19 @@ class Main_window(wx.Frame):
         tb_undo = self.toolbar.AddTool(wx.ID_UNDO, 'Undo', wx.ArtProvider.GetBitmap(wx.ART_UNDO))
         self.Bind(wx.EVT_TOOL, self.on_undo, tb_undo)
 
-        tb_redo = self.toolbar.AddTool(wx.ID_REDO, 'Undo', wx.ArtProvider.GetBitmap(wx.ART_REDO))
+        tb_redo = self.toolbar.AddTool(wx.ID_REDO, 'Redo', wx.ArtProvider.GetBitmap(wx.ART_REDO))
         self.Bind(wx.EVT_TOOL, self.on_redo, tb_redo)
+
+        tb_clear = self.toolbar.AddTool(wx.ID_CLEAR, 'Clear', wx.ArtProvider.GetBitmap(wx.ART_DELETE))
+        self.Bind(wx.EVT_TOOL, self.on_clear, tb_clear) 
 
         self.toolbar.AddSeparator() 
 
-
-        tb_clear = self.toolbar.AddTool(wx.ID_CLEAR, 'Clear', wx.ArtProvider.GetBitmap(wx.ART_DELETE))
-        self.Bind(wx.EVT_TOOL, self.on_clear, tb_clear)   
-
         tb_info = self.toolbar.AddTool(wx.ID_INFO, 'Info', wx.ArtProvider.GetBitmap(wx.ART_INFORMATION))
         self.Bind(wx.EVT_TOOL, self.on_info, tb_info)
+
+        tb_save_img = self.toolbar.AddTool(wx.ID_CLEAR, 'Save Image', wx.ArtProvider.GetBitmap(wx.ART_PRINT))
+        self.Bind(wx.EVT_TOOL, self.on_save_image, tb_save_img)
 
         self.toolbar.Realize()
 
@@ -619,6 +627,20 @@ class Main_window(wx.Frame):
                 self.SetTitle('TenTackle GUI - *')
         else:
             self.SetTitle('TenTackle GUI - ' + working_file_path)
+
+    def on_save_image(self, e):
+
+        file_path = None
+
+        file_dialog = wx.FileDialog(self, "Save image", "", "", "Image (*.png)|*.png", wx.FD_SAVE)
+        dialog_status = file_dialog.ShowModal()
+        file_path = file_dialog.GetPath()
+        file_dialog.Destroy()
+        if dialog_status == wx.ID_CANCEL:
+            return
+        print(file_path)
+
+        self.canvas.save(file_path)
 
 
 
