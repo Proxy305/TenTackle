@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 import json
-from scipy import integrate
+import uuid
 
 # Read config file
 config = {}
@@ -45,8 +45,8 @@ else:
         },
         "integration":{
             "method": "simps"
+        }
     }
-}
 
 # Helper functions: functions that accepts a procecced stress/strain data array
 def calculate(array, dimensions):  
@@ -142,6 +142,9 @@ class Table:
         self.tables = []    # Keeps all table raw infomation
         self._file_name = filename
 
+        # Set unique identifier for itself
+        self.table_id = uuid.uuid1()
+
         # Split multiple tables in single .csv file
         with open(filename, newline='', encoding='Shift-JIS') as f:
             reader = csv.reader(f)
@@ -170,8 +173,12 @@ class Table:
         else:
             self.logger = None
 
-        # Init truncation records
-        self.truncation_records = [[0 for i in range(self.batch_count)] for j in range(self.subbatch_count)]
+        # # Init truncation records
+        # self.truncation_records = [[0 for i in range(self.batch_count)] for j in range(self.subbatch_count)]
+
+    @property
+    def id(self):
+        return str(self.table_id)
 
     @property
     def table_name(self):
@@ -208,13 +215,14 @@ class Table:
         
         return array
 
-    def get_curve_data(self, batch, subbatch, dry_run = False):
+    def get_curve_data(self, batch, subbatch, truncate_point = -1, dry_run = False):
 
         '''
         Get processed strain/stress data
 
         dry_run: if dry_run == True, then calculation would not be performed and no actual data will be returned.
         This is for validating if data of a given batch and subbatch number combination exists.
+        truncate_point: set the truncation point, if set, the return data will be truncated.
 
         '''
 
@@ -224,74 +232,17 @@ class Table:
                 return True
             else:
                 calculated_curve = calculate(self.raw(batch, subbatch), self.dimensions(batch, subbatch))
-                return calculated_curve
+                if truncate_at == -1:
+                    return calculated_curve
+                else:
+                    return truncate_at(calculated_curve, truncate_point)
         except IndexError:
             if self.logger != None:
                 self.logger.warn("Batch %d subbatch %d declared in data, but not found. Skipping." % (batch, subbatch))
-    
-    # def set_truncation(self, batch, subbatch, truncate_at):
-
-    #     '''
-    #         Set truncation point of curve
-    #     '''
-
-    #     self.truncation_records[batch-1][subbatch-1] = truncate_at
 
     def __str__(self):
         return self._table_name
 
-class Curve():
-
-
-    def __init__(self, table, batch, subbatch, truncate_point = -1):
-
-        super().__init__()
-
-        self._table = table # Read only
-        self._batch = batch # Read only
-        self._subbatch = subbatch   # Read only
-        self.truncate_point = truncate_point
-
-    def get_data(self, truncate = False):
-
-        '''
-            Get data of points of curve
-
-            truncate: truncate the data before returning
-        '''
-        calculated_data = self.table.get_curve_data(self.batch, self.subbatch)
-        if truncate == True and self.truncate_point != -1:
-            return truncate_at(calculated_data, self.truncate_point)
-        else:
-            return calculated_data
-
-    def __str__(self):
-        return '%s-%d-%d' % (str(self.table), self.batch, self.subbatch)
-
-    @property
-    def table(self):
-        return self._table
-
-    @property
-    def batch(self):
-        return self._batch
-
-    @property
-    def subbatch(self):
-        return self._subbatch            
-
-    @property
-    def slope(self):
-        data = self.get_data()
-        return linear_regression(data)
-    
-    @property
-    def max_stress(self):
-        return max_stress(self.get_data())
-
-    @property
-    def table_name(self):
-        return str(self.table)
 
 class Curve_cache():
 
@@ -302,9 +253,8 @@ class Curve_cache():
     def __init__(self, name = None):
         super().__init__()
 
-        self._curve_index = 0     # A counter for generating unique index for curves
-        self._cache = {}    # Selection records, format: {index: Curve, ...}
-        self._cache_status = {}     # Current status of the cache, a LUT for looking up index and truncation of selected curves of each table file being cached, structure: {file_name: {index1: trunction, index2: truncation, ...}}
+        self._cache_status = {}     # Current status of the cache, a LUT for looking up index and truncation of selected curves of each table file being cached, structure: {table_id1: {batch1: {subbatch1: truncation1, ...}, ...}, ...}
+        self._ref_lut = {} # LUT for refereces to Table() objects, format: {table_id: Table(), ...}
         self._snapshot = [] # Snapshot stack for self.cache_status(), structure: [cache_status_1, cache_status_2, ...]
         self._pointer = -1  # A pointer indicating the current position in status snapshot
         self._snapshot_saved_pos = None # A position in self._snapshot, at which the snapshot has been saved to a JSON snapshot file
@@ -317,19 +267,19 @@ class Curve_cache():
     def cached(self):
 
         '''
-            Construct a list of curves
-
-            Legacy method, to be deprecated
+            Return a dict of cached curves
         '''
 
-        curves_list = {}
+        return self._cache_status
+    
+    @property
+    def lut(self):
+        
+        '''
+            Retrun a lut of table id and reference to table objs
+        '''
 
-        for table_file, info_dict in self._cache_status.items():
-            for index, turncation_point in info_dict.items():
-                var = self._cache[index]
-                curves_list[index] = var
-
-        return curves_list
+        return self._ref_lut
 
     @property
     def modified(self):
@@ -370,43 +320,32 @@ class Curve_cache():
             for selection in selections:
                 # Validate each selection, make sure data for a given batch/subbatch combination exists
                 if table.get_curve_data(selection[0], selection[1], dry_run = True) == True:
-                    truncate_point = -1
+                    if selection[0] not in cached_info:
+                        cached_info[selection[0]] = {}
                     if len(selection) == 3: # If selection contains truncation point data
-                        self._cache[self._curve_index] = Curve(table, selection[0], selection[1], selection[2])  # Set truncation if truncation data exists
-                        truncate_point = selection[2]
+                        cached_info[selection[0]][selection[1]] = selection[2]
                     else:
-                        self._cache[self._curve_index] = Curve(table, selection[0], selection[1])
-                    cached_info[self._curve_index] = truncate_point    # Write to list of index of selection
-                    self._curve_index += 1    # Set index counter
+                        cached_info[selection[0]][selection[1]] = -1   # Write to list of index of selection
+                    # self._curve_index += 1    # Set index counter
 
         # If no selection has been specified, then cache everything in the table
         else:
             # logger.debug("%d, %d" % (table.batch_count, table.subbatch_count))
             for batch in range (1, table.batch_count+1):
                 for subbatch in range(1, table.subbatch_count+1):
+                    if batch not in cached_info:
+                        cached_info[batch] = {}
                     if table.get_curve_data(batch, subbatch, dry_run = True) == True:
-                        self._cache[self._curve_index] = Curve(table, batch, subbatch)
-                        cached_info[self._curve_index] = -1 # -1: default runcation point (no truncation)
-                        self._curve_index += 1    # Set index counter
+                        cached_info[batch][subbatch] = -1
+                        # self._curve_index += 1    # Set index counter
 
-
-        # Validate if this table has been cached before
-        # if self._cache_status.get(table.file_name) != None:
-        #     # If this table has been cached before, revert the cache action
-        #     print("fuck python!")
-        #     self.remove_by_indices(self._cache_status[table.file_name])
         # Write import record
-        self._cache_status[table.file_name] = cached_info
+        self._cache_status[table.id] = cached_info
+        self._ref_lut[table.id] = table
 
         # Update status snapshot
         self.update_snapshot()
 
-        # Return indices of cached curves
-        cached_indices = []
-        for index, truncation in cached_info.items():
-            cached_indices.append(index)
-        return cached_indices
-            
 
     def cache_s(self, table, selection_str = ''):
 
@@ -434,7 +373,7 @@ class Curve_cache():
 
         self.cache(table, selections)
 
-    def set_truncation(self, index, truncate_at):
+    def set_truncation(self, table_id, batch, subbatch, truncate_at):
 
         '''
             Set truncation point for a curve in cache
@@ -443,52 +382,38 @@ class Curve_cache():
             truncate_ at: percentage turncation point
         '''
         
-        # Lookup the table file for the curve
-        curve = self._cache[index]
+        # # Lookup the table file for the curve
+        # curve = self._cache[index]
 
         # Rewrite truncation point information
-        self._cache_status[curve.table_file][index] = truncate_at
-        curve.truncate_point = truncate_at  # Legacy compatibility solution
+        self._cache_status[table_id][batch][subbatch] = truncate_at
+        # curve.truncate_point = truncate_at  # Legacy compatibility solution
 
         # Update snapshot
         self.update_snapshot()
 
 
 
-    def remove(self, index):
+    def remove(self, table_id, batch = None, subbatch = None):
 
         '''
-            Remove one curve in cache, by its index
+            Remove one curve/batch/table in cache
         '''
 
-        self._cache.pop(index, None)
+        self._cache_status[table_id][batch].pop(subbatch, None)
 
+        if self._cache_status[table_id][batch] == {} or subbatch == None:
+            # If batch is empty or no subbatch is given (deem as delete the whole batch), remove the subbatch
+            self._cache_status[table_id].pop(batch, None)
 
-    def remove_by_indices(self, indices):
+        if self._cache_status[table_id] == {} or batch == None and subbatch == None:
+            # If table is empty or no batch and subbatch is given (deem as delete the whole table), remove the table
+            self._cache_status.pop(table_id, None)
+            self._ref_lut.pop(table_id, None)
 
-        '''
-            Remove multiple curves specified by a list of indices in cache. A wrapper for Curve_cache.remove()
-
-            indices: a list of index
-        '''
-
-        for index in indices:
-
-            self.remove(index)
-
-    def revert(self, file_name):
-
-        '''
-            Revert a certain cache action specified by file name
-        '''
-
-        cached_info = self._cache_status.get(file_name)
-        
-        if cached_info  != None:
-            # self.remove_by_indices(cached_info)     
-            self._cache_status.pop(file_name)
-
+        # Update snapshot
         self.update_snapshot()
+
 
     def update_snapshot(self):
 
@@ -586,11 +511,12 @@ class Curve_cache():
     def reset(self):
 
         '''
-            Nuke everything
+            Nuke everything, including history
         '''
-        self._curve_index = 0
-        self._cache = {}
+        # self._curve_index = 0
+        # self._cache = {}
         self._cache_status = {}
+        self._ref_lut = {}
         self._snapshot = []
         self._pointer = -1
         self._snapshot_saved_pos = None
@@ -621,7 +547,15 @@ class Curve_cache():
 
         self.update_snapshot()
 
-    def analyze(self):
+    def analyze(self, selection = None):
+
+        '''
+        Analyze multiple curves and calculate average values.
+
+        selection: a dict of curves in the same format as in self._cache_status, if None, then every curve in the cache will be analyzed.
+
+        '''
+
         strength_pool = []
         slope_pool = []
         toughness_pool = []      
@@ -631,16 +565,26 @@ class Curve_cache():
             logger.error('No selection in curve cache "%s"' % self.name)
             return 0
 
-        for table_file, info_dict in self._cache_status.items():
-            for index, truncation_point in info_dict.items():
+        if selection != None:
+            selection = self._cache_status
 
-                curve = self._cache[index]
+        # Traverse the whole selection, calculate values for every curve
+        for table_id, table_contents in self._cache_status.items():
 
-                strength_pool.append(curve.max_stress)
-                slope_pool.append(curve.slope)
-                toughness = (integrate_x(curve.get_data(truncation_point)))/config["axis"]["y_scaling"] # Convert to N/m^2
-                print(toughness)
-                toughness_pool.append(toughness)
+            table = self._ref_lut[table_id] # Get reference to the Table object
+
+            for batch, batch_contents in table_contents.items():
+                for subbatch, truncate_point in batch_contents.items():
+
+                    data = table.get_curve_data(batch, subbatch, truncate_point)
+
+                    maxstress = max_stress(data)
+                    slope = linear_regression(data)
+                    toughness = (integrate_x(data))/config["axis"]["y_scaling"] # Convert to N/m^2
+
+                    strength_pool.append(maxstress)
+                    slope_pool.append(slope)
+                    toughness_pool.append(toughness)
 
         strength_array = np.array(strength_pool)
         slope_array = np.array(slope_pool)
@@ -656,29 +600,32 @@ class Curve_cache():
                 # Young's Modulus
 
                 'value': np.average(slope_array[:, 0]),
-                'std': np.std(slope_array[:, 0])
+                'std': np.std(slope_array[:, 0]),
+                'unit': config['axis']['y_unit']
             },
             'uts':{
 
                 # Ultimate tensile strength
 
                 'value': np.average(strength_array[:, 0]),
-                'std': np.std(strength_array[:, 0])
+                'std': np.std(strength_array[:, 0]),
+                'unit': config['axis']['y_unit']
             },
             'sams':{
 
                 # Strain at maximum stress
 
                 'value': np.average(strength_array[:, 1]),
-                'std': np.std(strength_array[:, 1])
+                'std': np.std(strength_array[:, 1]),
+                'unit': None
 
             },
             'toughness':{
                 'value': np.average(toughness_array),
-                'std': np.std(toughness_array) 
+                'std': np.std(toughness_array),
+                'unit': 'N*m^-2'
             }
         }
-        logger.debug(analysis_result.keys())
         print("Young's modulus for selected samples: %f, standard deviation: %f" % (analysis_result['ym']['value'], analysis_result['ym']['std']))   
         print("UTS for selected samples: %f, standard deviation: %f" % (analysis_result["uts"]["value"], analysis_result["uts"]["std"]))
         print("Strain at maximum stress for selected samples: %f, standard deviation: %f" % (analysis_result["sams"]["value"], analysis_result["sams"]["std"]))
@@ -712,21 +659,22 @@ class Curve_cache():
             # If no path is given and no active JSON file path has been set, save to the same directory as the corresponding .csv file of the 1st curve.
             first_pos = list(self._cache.keys())[0]   # Get index of the 1st element in cache
             path = os.path.splitext(self._cache[first_pos].table.file_name)[0] + '.json'
-            logger.debug('No file path specified for dumping. Saving file to default location: %s' % path)
+            logger.debug('No file path specified. Saving file to default location: %s' % path)
 
 
         # Construst LUT for curves that has been cached
         # LUT is like another version of self._cache_status; Hovever, the value of each item is a tuple containing curve info.
         lut = {}    # Structure of LUT: {filename:[(batch, subbatch, truncation), ...]}
 
-        for file_name, indices in self._cache_status.items():
+        for table_id, table_contents in self._cache_status.items():
             
             curve_info_list = []
+            file_name = self._ref_lut[table_id].file_name
 
-            # Translation from index to info tuple
-            for index in indices:
-                curve = self._cache[index]
-                curve_info_list.append((curve.batch, curve.subbatch, curve.truncate_point))
+            # Translation from dictionary to info tuple
+            for batch, batch_contents in table_contents.items():
+                for subbatch, truncate_point in batch_contents.items():
+                    curve_info_list.append(batch, subbatch, truncate_point)
 
             lut[file_name] = curve_info_list
 
@@ -801,18 +749,26 @@ class Curve_cache():
         elif self.is_empty() == False and force != True:
             return -2
             
+    def get_table_obj(self, table_id):
+
+        '''
+            Get the reference of a table object specified by table_id
+        '''
+
+        return self._ref_lut(table_id)
             
         
         
 # Plotting function
 
-def plot_array_cmd(curves_list, compose_mode = None, **kwargs):
+def plot_array_cmd(curves_dict, lut, compose_mode = None, **kwargs):
 
     '''
     Function for plotting arrays to file.
 
     Arguments:
-    - curves_list: Dictionary {int index, Curve() curve}, usually from Curve_cache.cached
+    - curves_dict: A dict in the style of Curve_cache()._cache_status, structure: {table_id1: {batch1: {subbatch1: truncation1, ...}, ...}, ...}
+    - lut: a dict for looking up references to table object by table_id
     - compose_mode: string, to plot the arrays in what manner
         - 'combined': plot all array in one plot
         - 'alone': plot each array in a single plot
@@ -830,10 +786,17 @@ def plot_array_cmd(curves_list, compose_mode = None, **kwargs):
         legend_list = []
 
         # Plot arrays in curves_list
-        for index, curve in curves_list.items():
-            array = curve.get_data()
-            legend_list.append(str(curve))
-            main_plt.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
+        for table_id, table_contents in curves_dict.items():
+
+            table = lut[table_id]
+
+            for batch, batch_contents in table_contents.items():
+                for subbatch, truncation in batch_contents.items():
+
+                    array = table.get_curve_data(batch, subbatch, truncation)
+                    legend_text = table.table_name + '-' + str(batch) + '-' +  str(subbatch)
+                    legend_list.append(legend_text)
+                    main_plt.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
 
         # Set axis labels 
         main_plt.axis(xmin=0, ymin=0)
@@ -929,7 +892,7 @@ if __name__ == "__main__":
             cache.cache(table)
 
         analyze_result = cache.analyze()
-        plot_array_cmd(cache.cached, compose_mode=args.compose_mode, legends = args.legend)
+        plot_array_cmd(cache.cached, cache.lut, compose_mode=args.compose_mode, legends = args.legend)
 
     elif args.interactive == True:
 
@@ -982,12 +945,12 @@ if __name__ == "__main__":
                         break
                     else:
                         print("Type combined/alone .\n")            
-                plot_array_cmd(cache.cached, compose_mode = compose_mode, legends = legend)
+                plot_array_cmd(cache.cached, cache.lut, compose_mode = compose_mode, legends = legend)
                         
             elif main_operation =='analysis':
                 cache.analyze()
             elif main_operation =='preview':
-                plot_array_cmd(cache.cached, preview = True)
+                plot_array_cmd(cache.cached, cache.lut, preview = True)
             elif main_operation =='clear':
                 cache.clear()
             else:
