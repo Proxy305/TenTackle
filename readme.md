@@ -4,11 +4,16 @@
 
 Tensile data analysis assisting tool for Shimazu EZ series.
 
+## Changelog
+
+Added image export function.
+Currently, due to the changes in underlying processing mechanism, the command line version might not be working as expected. This will be fixed in future releases
+
 ## Introduction
 
 TenTackle assists with analysis of raw tensile data from certain models of Shimazu universal testing machine (namely, Shimazu EZ series).
 
-**Warning**: TenTackle is NOT a general purpose software. Only download if you are authorized and are well aware of its intended usage.
+**Warning**: TenTackle is NOT a general purpose software. Do not deploy and use if you are not aware of its intended usage.
 
 ## Function
 
@@ -144,11 +149,15 @@ Then follow the instructions on screen.
 
 ## Glossary
 
-You may want to read about the [glossary](https://github.com/Proxy305/TenTackle/wiki/Glossary) of TenTackle before you get started. 
+You may want to read about the [glossary](https://github.com/Proxy305/TenTackle/wiki/Glossary) of TenTackle before you get started. The glossary contains information about concepts and nomenclature in TenTackle.
 
 ## Disclaimer
 
 TenTackle comes with **ABSOLUTELY NO WARRANTY**. Use at your own risk. TenTackle is currently in pre-alpha quality, therefore, always backup important data, and cross-check the results with another general purpose tool (MS Excel, Origin Pro, etc.).
+
+## About the name
+
+TenTackle means to TACKLE TENsile data.
 
 
 

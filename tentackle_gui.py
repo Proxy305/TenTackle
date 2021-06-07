@@ -9,7 +9,7 @@ import matplotlib
 from matplotlib import pyplot as plt
 # import ObjectListViewgit 
 
-from main import Table, Curve, Curve_cache, config
+from main import Table, Curve_cache, config
 
 matplotlib.interactive(False)
 matplotlib.use("WXAgg")
@@ -27,6 +27,20 @@ class CanvasPanel(wx.Panel):
         
         # self.slider = wx.Slider(self, -1, value=1, minValue=0, maxValue=11)
         # self.slider.Bind(wx.EVT_SLIDER, self.OnSlider)
+
+        self.params = {}
+
+        if kw.get('params') == None:
+            self.params = {
+                'numbering': True,
+                'fontsize': 12,
+                'x_unit': config.get('axis').get('x_unit'),
+                'y_unit': config.get('axis').get('y_unit'),
+                'x_scaling': config['axis']['x_scaling'],
+                'y_scaling': config['axis']['y_scaling'],
+                'title': ''
+            }
+            
 
         self.figure = Figure()
         self.ax = self.figure.add_axes([0.1, 0.15, 0.8, 0.8])
@@ -49,32 +63,62 @@ class CanvasPanel(wx.Panel):
     # def OnSlider(self, event):
     #     self.draw()
 
-    def draw(self, curves_list, selection = None):
+    def draw(self, cache, table_id=None, selections = None):
 
         '''
-            curves_list: Dictionary {int index: Curve() curve}
-            selection: List of curve indices
+            Draw curves on the figure.
+
+            - table_id: `string`, a table id in cache, if table id is provided, then all curves in this table will be drawn.
+
+            - cache: `Curve_cache`, a curve cache with all the curves
+            - selection:  `list`, a list containing selection, format: [{table_id: table_id_1, batch: batch_1, curve: curve_1}, ...]. If selection is provided, table_id will be ignored.
         ''' 
         
         self.clear()
 
 
-        self.ax.set_xlabel('Strain [%s]' % config.get('axis').get('x_unit'), fontsize=12)
-        self.ax.set_ylabel('Stress [%s]' % config.get('axis').get('y_unit'), fontsize=12)
-        self.ax.set_title = ("Strain")
+        self.ax.set_xlabel('Strain [%s]' % self.params['x_unit'], fontsize=self.params['fontsize'])
+        self.ax.set_ylabel('Stress [%s]' % self.params['y_unit'], fontsize=self.params['fontsize'])
+        self.ax.set_title = (self.params['title'])
 
         legend_list = []
-        if selection == None:
-            for index, curve in curves_list.items():
-                array = curve.get_data()
-                legend_list.append(str(curve))
-                self.ax.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
-        else:
-            for index in selection:
-                curve = curves_list[index]
-                array = curve.get_data()
-                legend_list.append(str(curve))
-                self.ax.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
+        if selections:
+            for selection in selections:
+                table_id = selection['table_id']
+                batch = selection['batch']
+                subbatch = selection['subbatch']
+                array = cache.get_curve(table_id, batch, subbatch)
+                legend_text = cache.lut[table_id].table_name
+                if self.params['numbering']:
+                    legend_text = legend_text  + '-' + str(batch) + '-' +  str(subbatch)
+                legend_list.append(legend_text)
+                self.ax.plot(array[:, 1]/self.params['x_scaling'], array[:, 0]/self.params['y_scaling'])
+        elif table_id:   # If no selections, go through the whole table specified by table_id
+            for batch in cache.cached[table_id].keys():
+                for subbatch in cache.cached[table_id][batch]:
+                    array = cache.get_curve(table_id, batch, subbatch)
+                    legend_text = cache.lut[table_id].table_name
+                    if self.params['numbering']:
+                        legend_text = legend_text  + '-' + str(batch) + '-' +  str(subbatch)
+                    legend_list.append(legend_text)
+                    self.ax.plot(array[:, 1]/self.params['x_scaling'], array[:, 0]/self.params['y_scaling'])
+        else:   # If nothing was specified, draw everything in cache
+            for table_id in cache.cached.keys():
+                for batch in cache.cached[table_id].keys():
+                    for subbatch in cache.cached[table_id][batch]:
+                        array = cache.get_curve(table_id, batch, subbatch)
+                        legend_text = cache.lut[table_id].table_name
+                        if self.params['numbering']:
+                            legend_text = legend_text  + '-' + str(batch) + '-' +  str(subbatch)
+                        legend_list.append(legend_text)
+                        self.ax.plot(array[:, 1]/self.params['x_scaling'], array[:, 0]/self.params['y_scaling'])
+
+        # else:
+        #     for index in selection:
+        #         curve = curves_list[index]
+        #         array = curve.get_data()
+        #         legend_list.append(str(curve))
+        #         self.ax.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
 
         
         
@@ -178,7 +222,7 @@ class Import_dialog(wx.Dialog):
 
         self.ok_button = wx.Button(self, label = 'OK', size=(70, 30))
         self.ok_button.Bind(wx.EVT_BUTTON, self.on_ok_clicked)
-        self.bottom_h_sizer.Add(self.ok_button, proportion = 1, flag = wx.ALIGN_RIGHT)
+        self.bottom_h_sizer.Add(self.ok_button, proportion = 1)
 
 
         self.main_sizer.Add(self.top_h_sizer)
@@ -207,7 +251,7 @@ class Import_dialog(wx.Dialog):
         self.file_path = file_path
         if os.path.isfile(file_path):
             self.table = Table(file_path)
-            indices = self.cache.cache(self.table)
+            self.cache.cache(self.table)
 
         # Cleanups 
         # self.cache.clear()
@@ -216,19 +260,26 @@ class Import_dialog(wx.Dialog):
         
 
         # Construct curve list for this single cache action
-        curve_list = {}
-        for index in indices:
-            curve_list[index] = self.cache.cached[index]
+        # curve_list = {}
+        # for index in indices:
+        #     curve_list[index] = self.cache.cached[index]
 
-        self.canvas_panel.draw(curve_list)
+        self.canvas_panel.draw(self.cache, table_id=self.table.id)
 
         list_position = 0  # A counter for setting list index
-        for curve_index, curve in curve_list.items():
-            self.list.InsertItem(list_position, str(curve_index))
-            self.list.SetItem(list_position, 1, str(curve.table))
-            self.list.SetItem(list_position, 2, str(curve.batch))
-            self.list.SetItem(list_position, 3, str(curve.subbatch))
-            self.list.SetItemData(list_position, curve_index)
+        for table_id, table_contents in self.cache.cached.items():
+            table_name = self.cache.lut[table_id].table_name
+            for batch, batch_contents in table_contents.items():
+                for subbatch, truncation_point in batch_contents.items():
+                    self.list.InsertItem(list_position, label = "%s %s %s" % (table_id, batch, subbatch))
+                    self.list.SetItem(list_position, 1, table_name)
+                    self.list.SetItem(list_position, 2, str(batch))
+                    self.list.SetItem(list_position, 3, str(subbatch))
+                    # self.list.SetItemPtrData(list_position, {
+                    #     "table_id": table_id,
+                    #     "batch": batch,
+                    #     "subbatch": subbatch
+                    # })
             list_position = list_position + 1
         
 
@@ -236,8 +287,8 @@ class Import_dialog(wx.Dialog):
 
         print("Redraw called")
         selection = self.get_selected()
-        index_list = self.translate_index(selection)
-        self.canvas_panel.draw(self.cache.cached, selection = index_list)
+        selections_list = self.translate_index(selection)
+        self.canvas_panel.draw(self.cache, selections = selections_list)
 
     def get_selected(self):
 
@@ -254,14 +305,19 @@ class Import_dialog(wx.Dialog):
     def translate_index(self, position_list):
 
         '''
-            Convert position list to curve index list
+            Convert position list to list of curve info
         '''
 
-        index_list = []
+        info_list = []
         for position in position_list:
-            index_list.append(self.list.GetItemData(position))
+            info = {
+                'table_id': self.list.GetItemText(position, col=0).split(' ')[0],
+                'batch': int(self.list.GetItemText(position, col=0).split(' ')[1]),
+                'subbatch': int(self.list.GetItemText(position, col=0).split(' ')[2])}
+            print(info)
+            info_list.append(info)
 
-        return index_list
+        return info_list
 
     def on_ok_clicked(self, event):
 
@@ -272,9 +328,8 @@ class Import_dialog(wx.Dialog):
         # Construct selection for Curve_cache.cache() for next caching action
         selected = self.translate_index(self.get_selected())    # List of selected curves
         selections = []  # Selection for Curve_cache.cache()
-        for index in selected:  # 
-            curve = self.cache.cached[index]
-            selections.append((curve.batch, curve.subbatch))
+        for selection in selected:  # 
+            selections.append((selection['batch'], selection['subbatch']))
 
         # Revert the previous action (made by self.set_file_path())
         self.cache.undo()
@@ -316,7 +371,7 @@ class Main_window(wx.Frame):
         self.left_v_sizer.Add(canvas_limiter, flag = wx.EXPAND)
         self.left_v_sizer.Add((0,10))
         slider_sizer_w = wx.BoxSizer(wx.HORIZONTAL)
-        slider_sizer_w.Add(wx.StaticText(self, label = 'Width', size=(50,-1)), proportion = 0, flag = wx.EXPAND|wx.ALIGN_CENTER)
+        slider_sizer_w.Add(wx.StaticText(self, label = 'Width', size=(50,-1)), proportion = 0, flag = wx.ALIGN_CENTER)
         self.width_slider = wx.Slider(self, name = 'width_slider', value=100)
         self.width_slider.Bind(wx.EVT_SLIDER, self.on_slider)
         slider_sizer_w.Add(self.width_slider, proportion = 1, flag = wx.EXPAND)
@@ -325,7 +380,7 @@ class Main_window(wx.Frame):
         self.left_v_sizer.Add(slider_sizer_w, flag = wx.EXPAND)
         self.left_v_sizer.Add((0,10))
         slider_sizer_h = wx.BoxSizer(wx.HORIZONTAL)
-        slider_sizer_h.Add(wx.StaticText(self, label = 'Height', size=(50,-1)), proportion = 0, flag = wx.EXPAND|wx.ALIGN_CENTER)
+        slider_sizer_h.Add(wx.StaticText(self, label = 'Height', size=(50,-1)), proportion = 0, flag = wx.ALIGN_CENTER)
         self.height_slider = wx.Slider(self, name = 'height_slider', value=100)
         self.height_slider.Bind(wx.EVT_SLIDER, self.on_slider)
         slider_sizer_h.Add(self.height_slider, proportion = 1, flag = wx.EXPAND)
@@ -338,11 +393,10 @@ class Main_window(wx.Frame):
         self.right_v_sizer.Add(wx.StaticText(self, label = 'Selection'), flag = wx.GROW)
         self.right_v_sizer.Add((0,10))
         self.list = wx.ListCtrl(self, wx.ID_ANY, style = wx.LC_REPORT)
-        self.list.InsertColumn(0, "Index")
-        self.list.InsertColumn(1, "Sample")
-        self.list.InsertColumn(2, "Batch")
-        self.list.InsertColumn(3, "Subbatch")
-        self.list.InsertColumn(4, "Truncation%")
+        self.list.InsertColumn(0, "Sample")
+        self.list.InsertColumn(1, "Batch")
+        self.list.InsertColumn(2, "Subbatch")
+        self.list.InsertColumn(3, "Truncation%")
         self.right_v_sizer.Add(self.list, proportion = 1, flag = wx.GROW)
 
 
@@ -359,7 +413,7 @@ class Main_window(wx.Frame):
         self.Fit()
         self.Centre()
 
-        self.console.write("TenTackle Beta - https://github.com/Proxy305/TenTackle")
+        self.console.write("TenTackle pre-alpha - https://github.com/Proxy305/TenTackle")
         self.console.write("Standby.")
 
     def init_ui(self):
@@ -447,14 +501,15 @@ class Main_window(wx.Frame):
         self.list.DeleteAllItems()
 
         list_position = 0
-        for curve_index, curve in self.cache.cached.items():
-            self.list.InsertItem(list_position, str(curve_index))
-            self.list.SetItem(list_position, 1, str(curve.table))
-            self.list.SetItem(list_position, 2, str(curve.batch))
-            self.list.SetItem(list_position, 3, str(curve.subbatch))
-            self.list.SetItem(list_position, 4, str(0))
-            self.list.SetItemData(list_position, curve_index)
-            list_position = list_position + 1  
+        for table_id, table_contents in self.cache.cached.items():
+            table_name = self.cache.lut[table_id].table_name
+            for batch, batch_contents in table_contents.items():
+                for subbatch, truncation_point in batch_contents.items():
+                    self.list.InsertItem(list_position, table_name)
+                    self.list.SetItem(list_position, 1, str(batch))
+                    self.list.SetItem(list_position, 2, str(subbatch))
+                    self.list.SetItem(list_position, 3, str(0))
+                    list_position = list_position + 1  
         
         
     def on_quit(self, e):
@@ -480,7 +535,7 @@ class Main_window(wx.Frame):
 
         # If the import dialog was closed by "OK", which means selection has been done
         if status == 0:
-            self.canvas.draw(self.cache.cached)
+            self.canvas.draw(self.cache)
 
             # Write curve info to listbox
             self.update_listbox()
@@ -555,7 +610,7 @@ class Main_window(wx.Frame):
                 self.cache.restore_snapshot(file_path = file_path, force = True)
 
             # If no error at all
-            self.canvas.draw(self.cache.cached)
+            self.canvas.draw(self.cache)
             self.update_listbox()
 
             # Set window title
@@ -594,7 +649,7 @@ class Main_window(wx.Frame):
     def on_undo(self, e):
         
         result = self.cache.undo()
-        self.canvas.draw(self.cache.cached)
+        self.canvas.draw(self.cache.cached, self.cache.lut)
         self.update_listbox()
 
         working_file_path = self.cache.working_snapshot_file
@@ -613,7 +668,7 @@ class Main_window(wx.Frame):
     def on_redo(self, e):
         
         result = self.cache.redo()
-        self.canvas.draw(self.cache.cached)
+        self.canvas.draw(self.cache.cached, self.cache.lut)
         self.update_listbox()
 
         working_file_path = self.cache.working_snapshot_file

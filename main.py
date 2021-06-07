@@ -297,7 +297,7 @@ class Curve_cache():
     def working_snapshot_file(self):
 
         '''
-            Get the currently active snapshot file
+            Get the URI of currently active snapshot JSON file
         '''
         return self._working_snapshot_file
 
@@ -674,7 +674,7 @@ class Curve_cache():
             # Translation from dictionary to info tuple
             for batch, batch_contents in table_contents.items():
                 for subbatch, truncate_point in batch_contents.items():
-                    curve_info_list.append(batch, subbatch, truncate_point)
+                    curve_info_list.append([batch, subbatch, truncate_point])
 
             lut[file_name] = curve_info_list
 
@@ -756,6 +756,17 @@ class Curve_cache():
         '''
 
         return self._ref_lut(table_id)
+
+    def get_curve(self, table_id, batch, subbatch):
+
+        '''
+            Get processed data for a given curve
+        '''
+
+        table = self.lut[table_id]
+        truncate = self.cached[table_id][batch][subbatch]
+
+        return table.get_curve_data(batch, subbatch, truncate_point = truncate)
             
         
         
