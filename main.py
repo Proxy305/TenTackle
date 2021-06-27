@@ -79,10 +79,10 @@ def linear_regression(array, from_to = (config['regression']['start'], config['r
         Example: (0.1, 0.2) means select a part of the array from x=0.1 to x=0.2, and calculate linear regression for this part.
     '''
 
-    start_idx = idx_of_nearest(array[:, 0], from_to[0])
+    start_idx = idx_of_nearest(array[:, 1], from_to[0])
     end_idx = idx_of_nearest(array[:, 1], from_to[1])
 
-    logger.debug("From, to: %d, %d" % (start_idx, end_idx))
+    # logger.debug("From, to: %d, %d" % (start_idx, end_idx))
 
     measure_area = array[start_idx:end_idx, :]
     x = measure_area[:, 1]
