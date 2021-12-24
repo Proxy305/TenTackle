@@ -97,10 +97,28 @@ def max_stress(array):
 
     '''
     Find maximum stress in a stress/strain array
+
+    Return value: tuple, (max_stress, strain_at_max_stress)
     '''
     
-    max_stress = np.amax(array, axis=0)
-    return max_stress   # max_stress: tuple, with stress and corresponding strain info
+    max_stress = np.amax(array[:, 0])
+    index_at_max_stress = np.argmax(array[:, 0])
+    strain_at_max_stress = array[index_at_max_stress, 1]
+    return max_stress, strain_at_max_stress
+
+def strain_at_break(array):
+
+    '''
+    Find strain at break, the strain value of the last point of the curve
+
+    Return value: number, strain_at_break
+    '''
+    
+    strain_at_break = np.amax(array[:, 1])
+
+    return strain_at_break
+
+
 
 def idx_of_nearest(array_1d, target):
 
@@ -232,7 +250,7 @@ class Table:
                 return True
             else:
                 calculated_curve = calculate(self.raw(batch, subbatch), self.dimensions(batch, subbatch))
-                if truncate_at == -1:
+                if truncate_point == -1:
                     return calculated_curve
                 else:
                     return truncate_at(calculated_curve, truncate_point)
@@ -260,6 +278,7 @@ class Curve_cache():
         self._snapshot_saved_pos = None # A position in self._snapshot, at which the snapshot has been saved to a JSON snapshot file
         self._working_snapshot_file = None # The path of active JSON snapshot file
         self.name = name
+        self.description = '' # Plain text description of the file
         
         self.update_snapshot()  # Set initial status
 
@@ -345,6 +364,7 @@ class Curve_cache():
 
         # Update status snapshot
         self.update_snapshot()
+
 
 
     def cache_s(self, table, selection_str = ''):
@@ -558,7 +578,8 @@ class Curve_cache():
 
         strength_pool = []
         slope_pool = []
-        toughness_pool = []      
+        toughness_pool = []
+        sab_pool = []      
         
         # Make sure that there's something in the cache
         if self._cache_status == {}:
@@ -578,17 +599,20 @@ class Curve_cache():
 
                     data = table.get_curve_data(batch, subbatch, truncate_point)
 
-                    maxstress = max_stress(data)
+                    max_stress_point = max_stress(data)
+                    strain_value_at_break = strain_at_break(data)
                     slope = linear_regression(data)
                     toughness = (integrate_x(data))/config["axis"]["y_scaling"] # Convert to N/m^2
 
-                    strength_pool.append(maxstress)
+                    strength_pool.append(max_stress_point)
                     slope_pool.append(slope)
                     toughness_pool.append(toughness)
+                    sab_pool.append(strain_value_at_break)
 
         strength_array = np.array(strength_pool)
         slope_array = np.array(slope_pool)
         toughness_array = np.array(toughness_pool)
+        sab_array = np.array(sab_pool)
 
         # print(slope_array)
         # print(toughness_array)
@@ -620,7 +644,17 @@ class Curve_cache():
                 'unit': None
 
             },
+            'sab':{
+
+                # Strain at break
+                'value': np.average(sab_array),
+                'std': np.std(sab_array),
+                'unit': None
+            },
             'toughness':{
+
+                # Area covered by the curve
+
                 'value': np.average(toughness_array),
                 'std': np.std(toughness_array),
                 'unit': 'N*m^-2'
@@ -638,7 +672,7 @@ class Curve_cache():
         '''
             Save current cache to a .json file, for editing in the future
 
-            file_path: optional, specifies the save path of the .json file. If no path selected, will first attempt to save to the current active JSON snapshot file. If active JSON file path has not been set, save to the same directory as the corresponding .csv file of the 1st curve.
+            - `file_path`: optional, specifies the save path of the .json file. If no path selected, will first attempt to save to the current active JSON snapshot file. If active JSON file path has not been set, save to the same directory as the corresponding .csv file of the 1st curve.
         '''
 
         # Figure out where to save the save file
@@ -678,6 +712,8 @@ class Curve_cache():
 
             lut[file_name] = curve_info_list
 
+
+        # Construct file contents
         
         # Save to file
 
@@ -706,6 +742,9 @@ class Curve_cache():
             file_path: string, specifies the .json file to retore
             force: bool, if True, then anything in current cache will be overwritten; if False, then this function will refuse to restore if something is already in the cache.
         '''
+
+        data = False
+
         if self.is_empty() == True or force == True:
             # Reset the current cache
             self.reset()
@@ -714,30 +753,6 @@ class Curve_cache():
                 try:
                     with open(file_path, 'r') as fp:
                         data = json.load(fp)
-
-                        # Load data to cache
-                        for data_file, selection_list in data.items():
-                            table = Table(data_file)
-
-                            # Construct selection info in the format required by self.cache()
-                            selections = []
-                            for selection in selection_list:
-                                selections.append(tuple(i for i in selection))
-
-                            # Cache items
-                            self.cache(table, selections)
-
-                        # Compress snapshot stack, so the whole restoration process will be treated as one action
-                        del self._snapshot[1 : len(self._snapshot) - 1]
-                        self._pointer = 1
-
-                        # Mark the current status as "saved"
-                        self._snapshot_saved_pos = self._pointer
-
-                        # Set the current active snapshot file path
-                        self._working_snapshot_file = file_path
-
-                        return 0
 
                 except FileNotFoundError as e:
                     pass
@@ -748,6 +763,42 @@ class Curve_cache():
                 return -1
         elif self.is_empty() == False and force != True:
             return -2
+
+        # Process the snapshot file
+
+        # Identify snapshot file version
+        isV2 = data.get('version', 1)
+
+        if isV2 == 2:
+            assets = data['assets']
+            config = data['config']
+            self.description = data['metadata'].get('notes')
+        else:
+            assets = data
+
+        # Load data to cache
+        for data_file, selection_list in assets.items():
+            table = Table(data_file)
+
+            # Construct selection info in the format required by self.cache()
+            selections = []
+            for selection in selection_list:
+                selections.append(tuple(i for i in selection))
+
+            # Cache items
+            self.cache(table, selections)
+
+        # Compress snapshot stack, so the whole restoration process will be treated as one action
+        del self._snapshot[1 : len(self._snapshot) - 1]
+        self._pointer = 1
+
+        # Mark the current status as "saved"
+        self._snapshot_saved_pos = self._pointer
+
+        # Set the current active snapshot file path
+        self._working_snapshot_file = file_path
+
+        return 0
             
     def get_table_obj(self, table_id):
 

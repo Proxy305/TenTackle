@@ -340,6 +340,43 @@ class Import_dialog(wx.Dialog):
         self.EndModal(0)
         
 
+class Plot_settings_dialog(wx.Dialog):
+
+    def __init__(self, *args, **kw):
+
+        super(Plot_settings_dialog, self).__init__(*args, **kw)
+
+        panel = wx.Panel(self)
+        hbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.listbox = wx.ListBox(panel)
+        hbox.Add(self.listbox, wx.ID_ANY, wx.EXPAND | wx.ALL, 20)
+
+        btnPanel = wx.Panel(panel)
+        vbox = wx.BoxSizer(wx.VERTICAL)
+        newBtn = wx.Button(btnPanel, wx.ID_ANY, 'New', size=(90, 30))
+        renBtn = wx.Button(btnPanel, wx.ID_ANY, 'Rename', size=(90, 30))
+        delBtn = wx.Button(btnPanel, wx.ID_ANY, 'Delete', size=(90, 30))
+        clrBtn = wx.Button(btnPanel, wx.ID_ANY, 'Clear', size=(90, 30))
+
+        # self.Bind(wx.EVT_BUTTON, self.NewItem, id=newBtn.GetId())
+        # self.Bind(wx.EVT_BUTTON, self.OnRename, id=renBtn.GetId())
+        # self.Bind(wx.EVT_BUTTON, self.OnDelete, id=delBtn.GetId())
+        # self.Bind(wx.EVT_BUTTON, self.OnClear, id=clrBtn.GetId())
+        # self.Bind(wx.EVT_LISTBOX_DCLICK, self.OnRename)
+
+        vbox.Add((-1, 20))
+        vbox.Add(newBtn)
+        vbox.Add(renBtn, 0, wx.TOP, 5)
+        vbox.Add(delBtn, 0, wx.TOP, 5)
+        vbox.Add(clrBtn, 0, wx.TOP, 5)
+
+        btnPanel.SetSizer(vbox)
+        hbox.Add(btnPanel, 0.6, wx.EXPAND | wx.RIGHT, 20)
+        panel.SetSizer(hbox)
+
+        self.SetTitle('wx.ListBox')
+
     
 
 class Main_window(wx.Frame):
@@ -369,6 +406,10 @@ class Main_window(wx.Frame):
         self.canvas = CanvasPanel(canvas_limiter)
         self.canvas.SetSize(wx.Size(800, 600))
         self.left_v_sizer.Add(canvas_limiter, flag = wx.EXPAND)
+        self.left_v_sizer.Add((0,10))
+        self.plot_settings_button = wx.Button(self, label = 'Plot settings', size=(120, 30))
+        self.plot_settings_button.Bind(wx.EVT_BUTTON, self.on_plot_settings)
+        self.left_v_sizer.Add(self.plot_settings_button, proportion = 1)
         self.left_v_sizer.Add((0,10))
         slider_sizer_w = wx.BoxSizer(wx.HORIZONTAL)
         slider_sizer_w.Add(wx.StaticText(self, label = 'Width', size=(50,-1)), proportion = 0, flag = wx.ALIGN_CENTER)
@@ -478,16 +519,22 @@ class Main_window(wx.Frame):
         tb_redo = self.toolbar.AddTool(wx.ID_REDO, 'Redo', wx.ArtProvider.GetBitmap(wx.ART_REDO))
         self.Bind(wx.EVT_TOOL, self.on_redo, tb_redo)
 
-        tb_clear = self.toolbar.AddTool(wx.ID_CLEAR, 'Clear', wx.ArtProvider.GetBitmap(wx.ART_DELETE))
+        tb_clear = self.toolbar.AddTool(wx.ID_REVERT, 'Clear', wx.ArtProvider.GetBitmap(wx.ART_DELETE))
         self.Bind(wx.EVT_TOOL, self.on_clear, tb_clear) 
 
         self.toolbar.AddSeparator() 
 
-        tb_info = self.toolbar.AddTool(wx.ID_INFO, 'Info', wx.ArtProvider.GetBitmap(wx.ART_INFORMATION))
+        tb_info = self.toolbar.AddTool(wx.ID_INFO, 'Info', wx.ArtProvider.GetBitmap(wx.ART_REPORT_VIEW))
         self.Bind(wx.EVT_TOOL, self.on_info, tb_info)
 
-        tb_save_img = self.toolbar.AddTool(wx.ID_CLEAR, 'Save Image', wx.ArtProvider.GetBitmap(wx.ART_PRINT))
+        tb_save_img = self.toolbar.AddTool(wx.ID_PRINT, 'Save image', wx.ArtProvider.GetBitmap(wx.ART_PRINT))
         self.Bind(wx.EVT_TOOL, self.on_save_image, tb_save_img)
+
+        self.toolbar.AddSeparator()
+
+        tb_write_notes = self.toolbar.AddTool(wx.ID_EDIT, 'Write text notes', wx.ArtProvider.GetBitmap(wx.ART_INFORMATION))
+        self.Bind(wx.EVT_TOOL, self.on_write_notes, tb_write_notes)
+
 
         self.toolbar.Realize()
 
@@ -535,6 +582,7 @@ class Main_window(wx.Frame):
 
         # If the import dialog was closed by "OK", which means selection has been done
         if status == 0:
+            print(self.cache)
             self.canvas.draw(self.cache)
 
             # Write curve info to listbox
@@ -566,7 +614,13 @@ class Main_window(wx.Frame):
 
         result_dict = self.cache.analyze()
         if result_dict != 0:
-            result_str = "Analysis result for curves in main cache:\n YM: %.3f\u00b1%.3f\n UTS: %.3f\u00b1%.3f\n E: %.3f\u00b1%.3f\n Toughness: %.3f\u00b1%.3f" % (result_dict['ym']['value'], result_dict['ym']['std'], result_dict['uts']['value'], result_dict['uts']['std'], result_dict['sams']['value'], result_dict['sams']['std'], result_dict['toughness']['value'], result_dict['toughness']['std'])
+            result_str = '''Analysis result for curves in main cache:
+            YM: %.3f\u00b1%.3f %s
+            UTS: %.3f\u00b1%.3f %s
+            Elongation at max stress: %.3f\u00b1%.3f
+            Elongation at break: %.3f\u00b1%.3f
+            Toughness: %.3f\u00b1%.3f %s'''% (
+                result_dict['ym']['value'], result_dict['ym']['std'], result_dict['ym']['unit'], result_dict['uts']['value'], result_dict['uts']['std'], result_dict['uts']['unit'], result_dict['sams']['value'], result_dict['sams']['std'], result_dict['sab']['value'], result_dict['sab']['std'], result_dict['toughness']['value'], result_dict['toughness']['std'], result_dict['toughness']['unit'])
             self.console.write(result_str)
         else:
             wx.MessageBox("No curve has been cached!", "Error", wx.OK | wx.ICON_EXCLAMATION)
@@ -608,6 +662,8 @@ class Main_window(wx.Frame):
                 # It the current history stack is not empty, ask user what to do
                 reply = wx.MessageBox('The current cache is not empty!\n All unsaved data will be lost if another file is loaded.\n Press OK if you still wish to proceed.', "Warning", wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_EXCLAMATION)
                 self.cache.restore_snapshot(file_path = file_path, force = True)
+            elif result == -3:
+                wx.MessageBox('You have just loaded a JSON snapshot file ', "Warning", wx.OK)
 
             # If no error at all
             self.canvas.draw(self.cache)
@@ -696,6 +752,16 @@ class Main_window(wx.Frame):
         print(file_path)
 
         self.canvas.save(file_path)
+
+    def on_write_notes(self, e):
+
+        pass
+
+    def on_plot_settings(self, e):
+
+        plot_settings_dialog = Plot_settings_dialog(self, style = wx.DEFAULT_DIALOG_STYLE)
+        dialog_status = plot_settings_dialog.ShowModal()
+        plot_settings_dialog.destroy()
 
 
 
