@@ -28,18 +28,18 @@ class CanvasPanel(wx.Panel):
         # self.slider = wx.Slider(self, -1, value=1, minValue=0, maxValue=11)
         # self.slider.Bind(wx.EVT_SLIDER, self.OnSlider)
 
-        self.params = {}
+        self.params = {
+            'numbering': True,
+            'fontsize': 12,
+            'x_unit': config.get('axis').get('x_unit'),
+            'y_unit': config.get('axis').get('y_unit'),
+            'x_scaling': config['axis']['x_scaling'],
+            'y_scaling': config['axis']['y_scaling'],
+            'title': ''
+        }
 
-        if kw.get('params') == None:
-            self.params = {
-                'numbering': True,
-                'fontsize': 12,
-                'x_unit': config.get('axis').get('x_unit'),
-                'y_unit': config.get('axis').get('y_unit'),
-                'x_scaling': config['axis']['x_scaling'],
-                'y_scaling': config['axis']['y_scaling'],
-                'title': ''
-            }
+        if isinstance(kw.get('params'), dict):
+            self.params.update(kw.get('params'))
             
 
         self.figure = Figure()
@@ -141,6 +141,16 @@ class CanvasPanel(wx.Panel):
     def save(self, save_path):
         
         self.figure.savefig(save_path, dpi=300, bbox_inches='tight')
+
+    def update_params(self, params):
+
+        '''
+            Change the parameters of the plot
+
+            params: `dict`, dictionary of new parameters
+        '''
+
+        self.params.update(params)
         
 
 
@@ -347,35 +357,42 @@ class Plot_settings_dialog(wx.Dialog):
         super(Plot_settings_dialog, self).__init__(*args, **kw)
 
         panel = wx.Panel(self)
-        hbox = wx.BoxSizer(wx.HORIZONTAL)
+        # hbox = wx.BoxSizer(wx.HORIZONTAL)
 
-        self.listbox = wx.ListBox(panel)
-        hbox.Add(self.listbox, wx.ID_ANY, wx.EXPAND | wx.ALL, 20)
+        # self.listbox = wx.ListBox(panel)
+        # hbox.Add(self.listbox, wx.ID_ANY, wx.EXPAND | wx.ALL, 20)
 
-        btnPanel = wx.Panel(panel)
-        vbox = wx.BoxSizer(wx.VERTICAL)
-        newBtn = wx.Button(btnPanel, wx.ID_ANY, 'New', size=(90, 30))
-        renBtn = wx.Button(btnPanel, wx.ID_ANY, 'Rename', size=(90, 30))
-        delBtn = wx.Button(btnPanel, wx.ID_ANY, 'Delete', size=(90, 30))
-        clrBtn = wx.Button(btnPanel, wx.ID_ANY, 'Clear', size=(90, 30))
+        # config_panel = wx.panel(panel)
+        
 
-        # self.Bind(wx.EVT_BUTTON, self.NewItem, id=newBtn.GetId())
-        # self.Bind(wx.EVT_BUTTON, self.OnRename, id=renBtn.GetId())
+        op_panel = wx.Panel(panel)
+        op_panel_hbox = wx.BoxSizer(wx.HORIZONTAL)
+        cancel_button = wx.Button(op_panel, wx.ID_ANY, 'Cancel', size=(90, 30))
+        apply_button = wx.Button(op_panel, wx.ID_ANY, 'Apply', size=(90, 30))
+
+        self.Bind(wx.EVT_BUTTON, self.on_cancel_clicked, id=cancel_button.GetId())
+        self.Bind(wx.EVT_BUTTON, self.on_apply_clicked, id=apply_button.GetId())
         # self.Bind(wx.EVT_BUTTON, self.OnDelete, id=delBtn.GetId())
         # self.Bind(wx.EVT_BUTTON, self.OnClear, id=clrBtn.GetId())
         # self.Bind(wx.EVT_LISTBOX_DCLICK, self.OnRename)
 
-        vbox.Add((-1, 20))
-        vbox.Add(newBtn)
-        vbox.Add(renBtn, 0, wx.TOP, 5)
-        vbox.Add(delBtn, 0, wx.TOP, 5)
-        vbox.Add(clrBtn, 0, wx.TOP, 5)
+        # op_panel_hbox.Add((-1, 20))
+        op_panel_hbox.Add(cancel_button)
+        op_panel_hbox.Add(apply_button)
 
-        btnPanel.SetSizer(vbox)
-        hbox.Add(btnPanel, 0.6, wx.EXPAND | wx.RIGHT, 20)
-        panel.SetSizer(hbox)
+        op_panel.SetSizer(op_panel_hbox)
+        op_panel_hbox.Add(op_panel, 0.6, wx.EXPAND | wx.RIGHT, 20)
 
         self.SetTitle('wx.ListBox')
+
+    def on_cancel_clicked():
+
+        pass
+
+    def on_apply_clicked():
+
+        pass
+
 
     
 
@@ -666,6 +683,8 @@ class Main_window(wx.Frame):
                 wx.MessageBox('You have just loaded a JSON snapshot file ', "Warning", wx.OK)
 
             # If no error at all
+
+            self.canvas.update_params({"numbering": False}) # Workaround 2021/12/27
             self.canvas.draw(self.cache)
             self.update_listbox()
 
@@ -761,13 +780,14 @@ class Main_window(wx.Frame):
 
         plot_settings_dialog = Plot_settings_dialog(self, style = wx.DEFAULT_DIALOG_STYLE)
         dialog_status = plot_settings_dialog.ShowModal()
-        plot_settings_dialog.destroy()
+        # plot_settings_dialog.destroy()
 
 
 
 def main():
 
     main_cache = Curve_cache()
+    plot_settings = {}
 
     app = wx.App()
     main_window = Main_window(None, cache = main_cache)
