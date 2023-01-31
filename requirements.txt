@@ -1,7 +1,7 @@
 astroid==2.3.3
 bibtexparser==1.1.0
 cycler==0.10.0
-future==0.18.2
+future==0.18.3
 isort==4.3.21
 kiwisolver==1.1.0
 lazy-object-proxy==1.4.3
