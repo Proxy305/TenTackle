@@ -229,7 +229,7 @@ class Table:
         # Retrieve raw data, and make new numpy array
         str_array = np.array(self.tables[3+sample_number][3:])
         # Convert data type to float
-        array = str_array[:, [1, 2]].astype(np.float)
+        array = str_array[:, [1, 2]].astype(np.single)
         
         return array
 
