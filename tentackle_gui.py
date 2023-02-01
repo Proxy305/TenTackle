@@ -424,7 +424,7 @@ class Main_window(wx.Frame):
         self.canvas.SetSize(wx.Size(800, 600))
         self.left_v_sizer.Add(canvas_limiter, flag = wx.EXPAND)
         self.left_v_sizer.Add((0,10))
-        self.plot_settings_button = wx.Button(self, label = 'Plot settings', size=(120, 30))
+        self.plot_settings_button = wx.Button(self, label = 'Plot/calculation settings', size=(120, 30))
         self.plot_settings_button.Bind(wx.EVT_BUTTON, self.on_plot_settings)
         self.left_v_sizer.Add(self.plot_settings_button, proportion = 1)
         self.left_v_sizer.Add((0,10))

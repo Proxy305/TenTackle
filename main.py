@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import math
 import json
 import uuid
+from enum import Enum
 
 # Read config file
 config = {}
@@ -145,20 +146,27 @@ def integrate_x(array):
     except Exception as e:
         print(e)
 
+# Machine types
+class MachineType(Enum):
+    EZ = 0  # Shimadzu EZ series
+    AGSX = -1 # Shimadzu AGS-X series
 
 # Data structures
 class Table:
 
     '''
-    Structure for storaging raw data from a single .csv file
+    Structure for reading and keeping raw data from a single .csv file of Shimadzu EZ and AGS-X series
     '''
 
-    def __init__(self, filename, tablename = '', logger=None):
+    def __init__(self, filename, tablename = ''):
 
         super().__init__()
         
         self.tables = []    # Keeps all table raw infomation
         self._file_name = filename
+
+        # Set logger
+        self.logger = logger
 
         # Set unique identifier for itself
         self.table_id = uuid.uuid1()
@@ -182,14 +190,33 @@ class Table:
         else:
             self._table_name = tablename
 
-        # Find batch count and subbatch count
-        self.batch_count = int(self.tables[2][1][1])
-        self.subbatch_count = int(self.tables[2][1][2])
-        if logger != None:
-            self.logger = logger
-            logger.info("Batch count: " + str(self.batch_count) + ", subbatch count: " + str(self.subbatch_count))
+        # Detect intrument type from job file extension
+        self.base_shift_value = 0    # Relative position of contents are different in Shimazu EZ and AGS-X series files are different
+        self.machine_type = MachineType.EZ
+        if str.split(self.tables[0][1][0], '.')[-1] == "tai":
+            self.logger.debug("Shimadzu EZ series")
+        elif str.split(self.tables[0][1][0], '.')[-1] == "xtas":
+            self.logger.debug("Shimadzu AGS-X series")
+            self.base_shift_value = -1
+            self.machine_type = MachineType.AGSX
         else:
-            self.logger = None
+            self.logger.warn("Automatic machine type interpretation failed. Default to legacy... (Shimadzu EZ series)")
+        
+        
+
+        # Find batch count and subbatch count using declared values. For AGS-X series, special routine that automatically detects the amount of samples were needed as wrong values are sometimes declared.
+        # Legacy routine
+        self.batch_count = int(self.tables[2 + self.base_shift_value][1][1])
+        self.subbatch_count = int(self.tables[2 + self.base_shift_value][1][2])
+
+        # AGS-X routine
+        if self.machine_type == MachineType.AGSX:
+            self.batch_count = int(self.tables[1][-1][0].split(" _ ")[0])
+            self.subbatch_count = int(self.tables[1][-1][0].split(" _ ")[1])
+
+
+        self.logger.info("Batch count: " + str(self.batch_count) + ", subbatch count: " + str(self.subbatch_count))
+
 
         # # Init truncation records
         # self.truncation_records = [[0 for i in range(self.batch_count)] for j in range(self.subbatch_count)]
@@ -212,9 +239,9 @@ class Table:
         Find dimensions of a given sample specified by batch and subbatch
         '''
         sample_number = batch * subbatch
-        thickness = float(self.tables[2][3+sample_number][1])
-        width = float(self.tables[2][3+sample_number][2])
-        length = float(self.tables[2][3+sample_number][3])
+        thickness = float(self.tables[2 + self.base_shift_value][3+sample_number][1])
+        width = float(self.tables[2 + self.base_shift_value][3+sample_number][2])
+        length = float(self.tables[2 + self.base_shift_value][3+sample_number][3])
         # logger.debug("Dimensions for batch %d, subbatch %d: %s" % (batch, subbatch, (thickness, width, length)))
 
         return thickness, width, length
@@ -227,7 +254,7 @@ class Table:
 
         sample_number = batch * subbatch
         # Retrieve raw data, and make new numpy array
-        str_array = np.array(self.tables[3+sample_number][3:])
+        str_array = np.array(self.tables[3 + sample_number + self.base_shift_value][3:])
         # Convert data type to float
         array = str_array[:, [1, 2]].astype(np.single)
         
@@ -1025,5 +1052,5 @@ else:
     logger = logging.getLogger(__name__)
     logger.setLevel(level=logging.DEBUG)
     ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
+    # ch.setLevel(logging.DEBUG)
     logger.addHandler(ch)
