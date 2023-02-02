@@ -741,12 +741,21 @@ class Curve_cache():
 
 
         # Construct file contents
+
+        snapshot_contents = {
+            "assets": lut,
+            "config": config,
+            "metadata": {
+                "notes": ""
+            },
+            "version": 2
+        }
         
         # Save to file
 
         try:
             with open(path, 'w') as fp:
-                json.dump(lut, fp)
+                json.dump(snapshot_contents, fp)
                 
                 # Mark the current status as "saved"
                 self._snapshot_saved_pos = self._pointer
