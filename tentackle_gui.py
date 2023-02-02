@@ -356,42 +356,84 @@ class Plot_settings_dialog(wx.Dialog):
 
         super(Plot_settings_dialog, self).__init__(*args, **kw)
 
-        panel = wx.Panel(self)
-        # hbox = wx.BoxSizer(wx.HORIZONTAL)
-
         # self.listbox = wx.ListBox(panel)
         # hbox.Add(self.listbox, wx.ID_ANY, wx.EXPAND | wx.ALL, 20)
 
         # config_panel = wx.panel(panel)
         
 
-        op_panel = wx.Panel(panel)
-        op_panel_hbox = wx.BoxSizer(wx.HORIZONTAL)
-        cancel_button = wx.Button(op_panel, wx.ID_ANY, 'Cancel', size=(90, 30))
-        apply_button = wx.Button(op_panel, wx.ID_ANY, 'Apply', size=(90, 30))
+        # main_panel = wx.Panel(self)
 
+        main_vbox = wx.BoxSizer(wx.VERTICAL)
+
+        y_unit_hbox = wx.BoxSizer(wx.HORIZONTAL)
+        self.y_unit_list = ["MPa", "kPa"]
+        self.y_unit_choice = wx.Choice(self, choices = self.y_unit_list)
+        if config["axis"]["y_unit"] == "MPa":
+            y_choice = 0
+        elif config["axis"]["y_unit"] == "kPa":
+            y_choice = 1
+        self.y_unit_choice.SetSelection(y_choice)
+        y_unit_hbox.Add(wx.StaticText(self, label = 'Y axis: '), flag = wx.EXPAND|wx.ALL, border = 10)
+        y_unit_hbox.Add(self.y_unit_choice, flag = wx.EXPAND|wx.ALL, border = 10)
+
+        lr_hbox = wx.BoxSizer(wx.HORIZONTAL)
+        self.lr_start = wx.TextCtrl(self, value = str(config["regression"]["start"]))
+        self.lr_end = wx.TextCtrl(self, value = str(config["regression"]["end"]))
+        lr_hbox.Add(wx.StaticText(self, label = 'Regression start (a.u. strain): '), flag = wx.EXPAND|wx.ALL, border = 10)
+        lr_hbox.Add(self.lr_start, flag = wx.EXPAND|wx.ALL, border = 10)
+        lr_hbox.Add(wx.StaticText(self, label = 'End: '), flag = wx.EXPAND|wx.ALL, border = 10)
+        lr_hbox.Add(self.lr_end, flag = wx.EXPAND|wx.ALL, border = 10)
+        
+
+        operations_hbox = wx.BoxSizer(wx.HORIZONTAL)
+        cancel_button = wx.Button(self, wx.ID_ANY, 'Cancel', size=(90, 30))
+        apply_button = wx.Button(self, wx.ID_ANY, 'Apply', size=(90, 30))
         self.Bind(wx.EVT_BUTTON, self.on_cancel_clicked, id=cancel_button.GetId())
         self.Bind(wx.EVT_BUTTON, self.on_apply_clicked, id=apply_button.GetId())
         # self.Bind(wx.EVT_BUTTON, self.OnDelete, id=delBtn.GetId())
         # self.Bind(wx.EVT_BUTTON, self.OnClear, id=clrBtn.GetId())
         # self.Bind(wx.EVT_LISTBOX_DCLICK, self.OnRename)
 
-        # op_panel_hbox.Add((-1, 20))
-        op_panel_hbox.Add(cancel_button)
-        op_panel_hbox.Add(apply_button)
+        operations_hbox.Add(cancel_button, flag = wx.EXPAND|wx.ALL, border=10)
+        operations_hbox.Add(apply_button, flag = wx.EXPAND|wx.ALL, border=10)
 
-        op_panel.SetSizer(op_panel_hbox)
-        op_panel_hbox.Add(op_panel, 0.6, wx.EXPAND | wx.RIGHT, 20)
+        main_vbox.Add(y_unit_hbox, flag = wx.EXPAND)
+        main_vbox.Add(lr_hbox, flag = wx.EXPAND)
+        main_vbox.Add(operations_hbox, flag = wx.EXPAND)
+
+        self.SetSizer(main_vbox)
+        self.Fit()
 
         self.SetTitle('wx.ListBox')
 
-    def on_cancel_clicked():
+    def on_cancel_clicked(self, event):
 
-        pass
+        self.EndModal(0)
 
-    def on_apply_clicked():
+    def on_apply_clicked(self, event):
 
-        pass
+        unit = self.y_unit_choice.GetSelection()
+        start_str = self.lr_start.GetValue()
+        end_str = self.lr_end.GetValue()
+        start_val = 0
+        end_val = 0
+
+        # Validification of data
+        try:
+            start_val = float(start_str)
+            end_val = float(end_str)
+        except ValueError:
+            wx.MessageBox("Starting/ending point illegal", "Value Error", wx.OK | wx.ICON_EXCLAMATION)
+            return
+
+        if start_val >= end_val:
+            wx.MessageBox("Starting point smaller than end point", "Value Error", wx.OK | wx.ICON_EXCLAMATION)
+            return
+
+        print("Unit: %s, start: %f, end: %f" % (self.y_unit_list[unit], start_val, end_val))
+
+        self.EndModal(0)
 
 
     
@@ -424,7 +466,7 @@ class Main_window(wx.Frame):
         self.canvas.SetSize(wx.Size(800, 600))
         self.left_v_sizer.Add(canvas_limiter, flag = wx.EXPAND)
         self.left_v_sizer.Add((0,10))
-        self.plot_settings_button = wx.Button(self, label = 'Plot/calculation settings', size=(120, 30))
+        self.plot_settings_button = wx.Button(self, label = 'Plot/calculation settings', size=(200, 30))
         self.plot_settings_button.Bind(wx.EVT_BUTTON, self.on_plot_settings)
         self.left_v_sizer.Add(self.plot_settings_button, proportion = 1)
         self.left_v_sizer.Add((0,10))
