@@ -11,43 +11,8 @@ import math
 import json
 import uuid
 from enum import Enum
+import config
 
-# Read config file
-config = {}
-
-if os.path.isfile("config.json"):
-
-    '''
-    Use external config first
-    '''
-    with open("config.json") as config_file:
-        config = json.load(config_file)
-else:
-
-    '''
-    If external config not found, fallback to embedded config
-    '''
-
-    config = {
-        "axis":{
-            "y_unit": "MPa",
-            "y_scaling": 1,
-            "x_unit": "",
-            "x_scaling": 1
-        },
-        "font":{
-            "family" : "Monospace",
-            "weight" : "bold",
-            "size"   : 12
-        },
-        "regression":{
-            "start": 0.001,
-            "end": 0.01           
-        },
-        "integration":{
-            "method": "simps"
-        }
-    }
 
 # Helper functions: functions that accepts a procecced stress/strain data array
 def calculate(array, dimensions):  
@@ -83,7 +48,7 @@ def linear_regression(array, from_to = (0, 0)):
     range = from_to
     if from_to != [0, 0]:
         # If from_to has been modified
-        range = (config['regression']['start'], config['regression']['end'])
+        range = (config.config['regression']['start'], config.config['regression']['end'])
 
     start_idx = idx_of_nearest(array[:, 1], range[0])
     end_idx = idx_of_nearest(array[:, 1], range[1])
@@ -635,7 +600,7 @@ class Curve_cache():
                     max_stress_point = max_stress(data)
                     strain_value_at_break = strain_at_break(data)
                     slope = linear_regression(data)
-                    toughness = (integrate_x(data))/config["axis"]["y_scaling"] # Convert to N/m^2
+                    toughness = (integrate_x(data))/config.config["axis"]["y_scaling"] # Convert to N/m^2
 
                     strength_pool.append(max_stress_point)
                     slope_pool.append(slope)
@@ -656,33 +621,33 @@ class Curve_cache():
 
                 # Young's Modulus
 
-                'value': np.average(slope_array[:, 0])/config["axis"]["y_scaling"],
-                'std': np.std(slope_array[:, 0])/config["axis"]["y_scaling"],
-                'unit': config['axis']['y_unit']
+                'value': np.average(slope_array[:, 0])/config.config["axis"]["y_scaling"],
+                'std': np.std(slope_array[:, 0])/config.config["axis"]["y_scaling"],
+                'unit': config.config['axis']['y_unit']
             },
             'uts':{
 
                 # Ultimate tensile strength
 
-                'value': np.average(strength_array[:, 0])/config["axis"]["y_scaling"],
-                'std': np.std(strength_array[:, 0])/config["axis"]["y_scaling"],
-                'unit': config['axis']['y_unit']
+                'value': np.average(strength_array[:, 0])/config.config["axis"]["y_scaling"],
+                'std': np.std(strength_array[:, 0])/config.config["axis"]["y_scaling"],
+                'unit': config.config['axis']['y_unit']
             },
             'sams':{
 
                 # Strain at maximum stress
 
-                'value': np.average(strength_array[:, 1])/config["axis"]["y_scaling"],
-                'std': np.std(strength_array[:, 1])/config["axis"]["y_scaling"],
-                'unit': config["axis"]["x_unit"]
+                'value': np.average(strength_array[:, 1])/config.config["axis"]["y_scaling"],
+                'std': np.std(strength_array[:, 1])/config.config["axis"]["y_scaling"],
+                'unit': config.config["axis"]["x_unit"]
 
             },
             'sab':{
 
                 # Strain at break
-                'value': np.average(sab_array)/config["axis"]["x_scaling"],
-                'std': np.std(sab_array)/config["axis"]["x_scaling"],
-                'unit': config["axis"]["x_unit"]
+                'value': np.average(sab_array)/config.config["axis"]["x_scaling"],
+                'std': np.std(sab_array)/config.config["axis"]["x_scaling"],
+                'unit': config.config["axis"]["x_unit"]
             },
             'toughness':{
 
@@ -750,7 +715,7 @@ class Curve_cache():
 
         snapshot_contents = {
             "assets": lut,
-            "config": config,
+            "config.config": config.config,
             "metadata": {
                 "notes": ""
             },
@@ -813,7 +778,7 @@ class Curve_cache():
 
         if isV2 == 2:
             assets = data['assets']
-            config = data['config']
+            config.config = data['config']
             self.description = data['metadata'].get('notes')
         else:
             assets = data
@@ -900,12 +865,12 @@ def plot_array_cmd(curves_dict, lut, compose_mode = None, **kwargs):
                     array = table.get_curve_data(batch, subbatch, truncation)
                     legend_text = table.table_name + '-' + str(batch) + '-' +  str(subbatch)
                     legend_list.append(legend_text)
-                    main_plt.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
+                    main_plt.plot(array[:, 1]/config.config['axis']['x_scaling'], array[:, 0]/config.config['axis']['y_scaling'])
 
         # Set axis labels 
         main_plt.axis(xmin=0, ymin=0)
-        main_plt.set(ylabel = 'Stress [%s]' % config.get('axis').get('y_unit'), xlabel = 'Strain [%s]' % config.get('axis').get('x_unit'))
-        # main_plt.set_xlabel('Strain [%s]' % config.get('axis').get('x_unit'))
+        main_plt.set(ylabel = 'Stress [%s]' % config.config.get('axis').get('y_unit'), xlabel = 'Strain [%s]' % config.config.get('axis').get('x_unit'))
+        # main_plt.set_xlabel('Strain [%s]' % config.config.get('axis').get('x_unit'))
 
         # Generate legends
         if kwargs.get('legends') or kwargs.get('preview'):              
@@ -926,10 +891,10 @@ def plot_array_cmd(curves_dict, lut, compose_mode = None, **kwargs):
         for index, curve in curves_list.items():
             array = curve.get_data()
             plt.figure(i)
-            plt.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
+            plt.plot(array[:, 1]/config.config['axis']['x_scaling'], array[:, 0]/config.config['axis']['y_scaling'])
             plt.axis(xmin=0, ymin=0)
-            plt.ylabel('Stress [%s]' % config.get('axis').get('y_unit'))
-            plt.xlabel('Strain [%s]' % config.get('axis').get('x_unit'))
+            plt.ylabel('Stress [%s]' % config.config.get('axis').get('y_unit'))
+            plt.xlabel('Strain [%s]' % config.config.get('axis').get('x_unit'))
             plt.savefig(str(curve) + '.png')
     elif compose_mode == 'sub':
         pass
@@ -973,7 +938,7 @@ if __name__ == "__main__":
     cache = Curve_cache(name="main_cmd_cache")
 
     # Set up plotting config
-    font = config['font']
+    font = config.config['font']
     plt.rc('font', **font)
 
     if args.interactive != True and args.file:

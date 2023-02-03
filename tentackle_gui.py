@@ -9,7 +9,8 @@ import matplotlib
 from matplotlib import pyplot as plt
 # import ObjectListViewgit 
 
-from main import Table, Curve_cache, config
+from main import Table, Curve_cache
+import config
 
 matplotlib.interactive(False)
 matplotlib.use("WXAgg")
@@ -31,10 +32,10 @@ class CanvasPanel(wx.Panel):
         self.params = {
             'numbering': True,
             'fontsize': 12,
-            'x_unit': config.get('axis').get('x_unit'),
-            'y_unit': config.get('axis').get('y_unit'),
-            'x_scaling': config['axis']['x_scaling'],
-            'y_scaling': config['axis']['y_scaling'],
+            'x_unit': config.config.get('axis').get('x_unit'),
+            'y_unit': config.config.get('axis').get('y_unit'),
+            'x_scaling': config.config['axis']['x_scaling'],
+            'y_scaling': config.config['axis']['y_scaling'],
             'title': ''
         }
 
@@ -77,8 +78,8 @@ class CanvasPanel(wx.Panel):
         self.clear()
 
 
-        self.ax.set_xlabel('Strain [%s]' % config['axis']['x_unit'], fontsize=self.params['fontsize'])
-        self.ax.set_ylabel('Stress [%s]' % config['axis']['y_unit'], fontsize=self.params['fontsize'])
+        self.ax.set_xlabel('Strain [%s]' % config.config['axis']['x_unit'], fontsize=self.params['fontsize'])
+        self.ax.set_ylabel('Stress [%s]' % config.config['axis']['y_unit'], fontsize=self.params['fontsize'])
         self.ax.set_title = (self.params['title'])
 
         legend_list = []
@@ -92,7 +93,7 @@ class CanvasPanel(wx.Panel):
                 if self.params['numbering']:
                     legend_text = legend_text  + '-' + str(batch) + '-' +  str(subbatch)
                 legend_list.append(legend_text)
-                self.ax.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
+                self.ax.plot(array[:, 1]/config.config['axis']['x_scaling'], array[:, 0]/config.config['axis']['y_scaling'])
         elif table_id:   # If no selections, go through the whole table specified by table_id
             for batch in cache.cached[table_id].keys():
                 for subbatch in cache.cached[table_id][batch]:
@@ -101,7 +102,7 @@ class CanvasPanel(wx.Panel):
                     if self.params['numbering']:
                         legend_text = legend_text  + '-' + str(batch) + '-' +  str(subbatch)
                     legend_list.append(legend_text)
-                    self.ax.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
+                    self.ax.plot(array[:, 1]/config.config['axis']['x_scaling'], array[:, 0]/config.config['axis']['y_scaling'])
         else:   # If nothing was specified, draw everything in cache
             for table_id in cache.cached.keys():
                 for batch in cache.cached[table_id].keys():
@@ -111,14 +112,14 @@ class CanvasPanel(wx.Panel):
                         if self.params['numbering']:
                             legend_text = legend_text  + '-' + str(batch) + '-' +  str(subbatch)
                         legend_list.append(legend_text)
-                        self.ax.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
+                        self.ax.plot(array[:, 1]/config.config['axis']['x_scaling'], array[:, 0]/config.config['axis']['y_scaling'])
 
         # else:
         #     for index in selection:
         #         curve = curves_list[index]
         #         array = curve.get_data()
         #         legend_list.append(str(curve))
-        #         self.ax.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
+        #         self.ax.plot(array[:, 1]/config.config['axis']['x_scaling'], array[:, 0]/config.config['axis']['y_scaling'])
 
         
         
@@ -361,17 +362,17 @@ class Plot_settings_dialog(wx.Dialog):
         y_unit_hbox = wx.BoxSizer(wx.HORIZONTAL)
         self.y_unit_list = ["MPa", "kPa"]
         self.y_unit_choice = wx.Choice(self, choices = self.y_unit_list)
-        if config["axis"]["y_unit"] == "MPa":
+        if config.config["axis"]["y_unit"] == "MPa":
             y_choice = 0
-        elif config["axis"]["y_unit"] == "kPa":
+        elif config.config["axis"]["y_unit"] == "kPa":
             y_choice = 1
         self.y_unit_choice.SetSelection(y_choice)
         y_unit_hbox.Add(wx.StaticText(self, label = 'Y axis: '), flag = wx.EXPAND|wx.ALL, border = 10)
         y_unit_hbox.Add(self.y_unit_choice, flag = wx.EXPAND|wx.ALL, border = 10)
 
         lr_hbox = wx.BoxSizer(wx.HORIZONTAL)
-        self.lr_start = wx.TextCtrl(self, value = str(config["regression"]["start"]))
-        self.lr_end = wx.TextCtrl(self, value = str(config["regression"]["end"]))
+        self.lr_start = wx.TextCtrl(self, value = str(config.config["regression"]["start"]))
+        self.lr_end = wx.TextCtrl(self, value = str(config.config["regression"]["end"]))
         lr_hbox.Add(wx.StaticText(self, label = 'Regression start (a.u. strain): '), flag = wx.EXPAND|wx.ALL, border = 10)
         lr_hbox.Add(self.lr_start, flag = wx.EXPAND|wx.ALL, border = 10)
         lr_hbox.Add(wx.StaticText(self, label = 'End: '), flag = wx.EXPAND|wx.ALL, border = 10)
@@ -421,19 +422,19 @@ class Plot_settings_dialog(wx.Dialog):
             return
 
         # Apply new settings
-        config["axis"]["y_unit"] = self.y_unit_list[unit]
+        config.config["axis"]["y_unit"] = self.y_unit_list[unit]
         if unit == 0:
             # If the Y axis unit is MPa, scaling factor should be 1
-            config["axis"]["y_scaling"] = 1
+            config.config["axis"]["y_scaling"] = 1
         if unit == 1:
             # If the Y axis unit is kPa, scaling factor should be 0.001
-            config["axis"]["y_scaling"] = 0.001
+            config.config["axis"]["y_scaling"] = 0.001
 
-        config["regression"]["start"] = start_val
-        config["regression"]["end"] = end_val
+        config.config["regression"]["start"] = start_val
+        config.config["regression"]["end"] = end_val
 
-        # print("Unit: %s, start: %f, end: %f" % (self.y_unit_list[unit], config["regression"]["start"], config["regression"]["end"]))
-        print(config)
+        # print("Unit: %s, start: %f, end: %f" % (self.y_unit_list[unit], config.config["regression"]["start"], config.config["regression"]["end"]))
+        print(config.config)
 
         self.EndModal(0)
 
