@@ -70,7 +70,7 @@ def truncate_at(array, percentage):
 
     return array[0:truncated_len, :]
 
-def linear_regression(array, from_to = (config['regression']['start'], config['regression']['end'])):
+def linear_regression(array, from_to = (0, 0)):
 
     '''
     Linear regression helper function, for finding slopes
@@ -80,8 +80,14 @@ def linear_regression(array, from_to = (config['regression']['start'], config['r
         Example: (0.1, 0.2) means select a part of the array from x=0.1 to x=0.2, and calculate linear regression for this part.
     '''
 
-    start_idx = idx_of_nearest(array[:, 1], from_to[0])
-    end_idx = idx_of_nearest(array[:, 1], from_to[1])
+    range = from_to
+    if from_to != [0, 0]:
+        # If from_to has been modified
+        range = (config['regression']['start'], config['regression']['end'])
+
+    start_idx = idx_of_nearest(array[:, 1], range[0])
+    end_idx = idx_of_nearest(array[:, 1], range[1])
+    print(range)
 
     # logger.debug("From, to: %d, %d" % (start_idx, end_idx))
 
@@ -650,33 +656,33 @@ class Curve_cache():
 
                 # Young's Modulus
 
-                'value': np.average(slope_array[:, 0]),
-                'std': np.std(slope_array[:, 0]),
+                'value': np.average(slope_array[:, 0])/config["axis"]["y_scaling"],
+                'std': np.std(slope_array[:, 0])/config["axis"]["y_scaling"],
                 'unit': config['axis']['y_unit']
             },
             'uts':{
 
                 # Ultimate tensile strength
 
-                'value': np.average(strength_array[:, 0]),
-                'std': np.std(strength_array[:, 0]),
+                'value': np.average(strength_array[:, 0])/config["axis"]["y_scaling"],
+                'std': np.std(strength_array[:, 0])/config["axis"]["y_scaling"],
                 'unit': config['axis']['y_unit']
             },
             'sams':{
 
                 # Strain at maximum stress
 
-                'value': np.average(strength_array[:, 1]),
-                'std': np.std(strength_array[:, 1]),
-                'unit': None
+                'value': np.average(strength_array[:, 1])/config["axis"]["y_scaling"],
+                'std': np.std(strength_array[:, 1])/config["axis"]["y_scaling"],
+                'unit': config["axis"]["x_unit"]
 
             },
             'sab':{
 
                 # Strain at break
-                'value': np.average(sab_array),
-                'std': np.std(sab_array),
-                'unit': None
+                'value': np.average(sab_array)/config["axis"]["x_scaling"],
+                'std': np.std(sab_array)/config["axis"]["x_scaling"],
+                'unit': config["axis"]["x_unit"]
             },
             'toughness':{
 

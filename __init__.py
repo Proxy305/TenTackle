@@ -1,1 +1,1 @@
-from main import Table, Curve_cache, Curve
+# from main import Table, Curve_cache, Curve

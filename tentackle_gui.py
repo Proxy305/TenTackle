@@ -77,8 +77,8 @@ class CanvasPanel(wx.Panel):
         self.clear()
 
 
-        self.ax.set_xlabel('Strain [%s]' % self.params['x_unit'], fontsize=self.params['fontsize'])
-        self.ax.set_ylabel('Stress [%s]' % self.params['y_unit'], fontsize=self.params['fontsize'])
+        self.ax.set_xlabel('Strain [%s]' % config['axis']['x_unit'], fontsize=self.params['fontsize'])
+        self.ax.set_ylabel('Stress [%s]' % config['axis']['y_unit'], fontsize=self.params['fontsize'])
         self.ax.set_title = (self.params['title'])
 
         legend_list = []
@@ -92,7 +92,7 @@ class CanvasPanel(wx.Panel):
                 if self.params['numbering']:
                     legend_text = legend_text  + '-' + str(batch) + '-' +  str(subbatch)
                 legend_list.append(legend_text)
-                self.ax.plot(array[:, 1]/self.params['x_scaling'], array[:, 0]/self.params['y_scaling'])
+                self.ax.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
         elif table_id:   # If no selections, go through the whole table specified by table_id
             for batch in cache.cached[table_id].keys():
                 for subbatch in cache.cached[table_id][batch]:
@@ -101,7 +101,7 @@ class CanvasPanel(wx.Panel):
                     if self.params['numbering']:
                         legend_text = legend_text  + '-' + str(batch) + '-' +  str(subbatch)
                     legend_list.append(legend_text)
-                    self.ax.plot(array[:, 1]/self.params['x_scaling'], array[:, 0]/self.params['y_scaling'])
+                    self.ax.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
         else:   # If nothing was specified, draw everything in cache
             for table_id in cache.cached.keys():
                 for batch in cache.cached[table_id].keys():
@@ -111,7 +111,7 @@ class CanvasPanel(wx.Panel):
                         if self.params['numbering']:
                             legend_text = legend_text  + '-' + str(batch) + '-' +  str(subbatch)
                         legend_list.append(legend_text)
-                        self.ax.plot(array[:, 1]/self.params['x_scaling'], array[:, 0]/self.params['y_scaling'])
+                        self.ax.plot(array[:, 1]/config['axis']['x_scaling'], array[:, 0]/config['axis']['y_scaling'])
 
         # else:
         #     for index in selection:
@@ -356,14 +356,6 @@ class Plot_settings_dialog(wx.Dialog):
 
         super(Plot_settings_dialog, self).__init__(*args, **kw)
 
-        # self.listbox = wx.ListBox(panel)
-        # hbox.Add(self.listbox, wx.ID_ANY, wx.EXPAND | wx.ALL, 20)
-
-        # config_panel = wx.panel(panel)
-        
-
-        # main_panel = wx.Panel(self)
-
         main_vbox = wx.BoxSizer(wx.VERTICAL)
 
         y_unit_hbox = wx.BoxSizer(wx.HORIZONTAL)
@@ -391,9 +383,6 @@ class Plot_settings_dialog(wx.Dialog):
         apply_button = wx.Button(self, wx.ID_ANY, 'Apply', size=(90, 30))
         self.Bind(wx.EVT_BUTTON, self.on_cancel_clicked, id=cancel_button.GetId())
         self.Bind(wx.EVT_BUTTON, self.on_apply_clicked, id=apply_button.GetId())
-        # self.Bind(wx.EVT_BUTTON, self.OnDelete, id=delBtn.GetId())
-        # self.Bind(wx.EVT_BUTTON, self.OnClear, id=clrBtn.GetId())
-        # self.Bind(wx.EVT_LISTBOX_DCLICK, self.OnRename)
 
         operations_hbox.Add(cancel_button, flag = wx.EXPAND|wx.ALL, border=10)
         operations_hbox.Add(apply_button, flag = wx.EXPAND|wx.ALL, border=10)
@@ -431,7 +420,20 @@ class Plot_settings_dialog(wx.Dialog):
             wx.MessageBox("Starting point smaller than end point", "Value Error", wx.OK | wx.ICON_EXCLAMATION)
             return
 
-        print("Unit: %s, start: %f, end: %f" % (self.y_unit_list[unit], start_val, end_val))
+        # Apply new settings
+        config["axis"]["y_unit"] = self.y_unit_list[unit]
+        if unit == 0:
+            # If the Y axis unit is MPa, scaling factor should be 1
+            config["axis"]["y_scaling"] = 1
+        if unit == 1:
+            # If the Y axis unit is kPa, scaling factor should be 0.001
+            config["axis"]["y_scaling"] = 0.001
+
+        config["regression"]["start"] = start_val
+        config["regression"]["end"] = end_val
+
+        # print("Unit: %s, start: %f, end: %f" % (self.y_unit_list[unit], config["regression"]["start"], config["regression"]["end"]))
+        print(config)
 
         self.EndModal(0)
 
@@ -726,7 +728,7 @@ class Main_window(wx.Frame):
 
             # If no error at all
 
-            self.canvas.update_params({"numbering": False}) # Workaround 2021/12/27
+            # self.canvas.update_params({"numbering": False}) # Workaround 2021/12/27
             self.canvas.draw(self.cache)
             self.update_listbox()
 
